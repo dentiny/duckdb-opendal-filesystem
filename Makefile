@@ -13,3 +13,10 @@ EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
+
+# Format extension sources/tests through the shared DuckDB formatter, then
+# format this extension's standalone CMake project.
+format-all: format
+	cmake-format -i CMakeLists.txt
+
+.PHONY: format-all

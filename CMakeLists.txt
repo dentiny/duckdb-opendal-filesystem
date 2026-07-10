@@ -8,7 +8,9 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
-set(CMAKE_CXX_STANDARD "17" CACHE STRING "C++ standard to enforce")
+set(CMAKE_CXX_STANDARD
+    "17"
+    CACHE STRING "C++ standard to enforce")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(src/include)
@@ -21,9 +23,15 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/.cargo/bin/cargo")
   set(ENV{RUSTUP_HOME} "${CMAKE_CURRENT_LIST_DIR}/.rustup")
   set(ENV{PATH} "${CMAKE_CURRENT_LIST_DIR}/.cargo/bin:$ENV{PATH}")
 endif()
-set(OPENDAL_ENABLE_ASYNC OFF CACHE BOOL "Build OpenDAL's async C++ API" FORCE)
-set(OPENDAL_ENABLE_TESTING OFF CACHE BOOL "Build OpenDAL's C++ tests" FORCE)
-set(OPENDAL_ENABLE_DOCUMENTATION OFF CACHE BOOL "Build OpenDAL's C++ docs" FORCE)
+set(OPENDAL_ENABLE_ASYNC
+    OFF
+    CACHE BOOL "Build OpenDAL's async C++ API" FORCE)
+set(OPENDAL_ENABLE_TESTING
+    OFF
+    CACHE BOOL "Build OpenDAL's C++ tests" FORCE)
+set(OPENDAL_ENABLE_DOCUMENTATION
+    OFF
+    CACHE BOOL "Build OpenDAL's C++ docs" FORCE)
 add_subdirectory(opendal/bindings/cpp opendal-cpp)
 
 set(EXTENSION_SOURCES src/duckdb_opendalfs_extension.cpp)
@@ -44,7 +52,8 @@ target_link_libraries(${LOADABLE_EXTENSION_NAME} opendal_cpp)
 if(APPLE)
   # Cargo's security-framework crates are embedded in the Rust static archive;
   # their native dependencies must be forwarded to every final consumer.
-  target_link_libraries(opendal_cpp PUBLIC "-framework CoreFoundation" "-framework Security")
+  target_link_libraries(opendal_cpp PUBLIC "-framework CoreFoundation"
+                                           "-framework Security")
 endif()
 
 install(
