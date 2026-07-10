@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Set extension name here
-set(TARGET_NAME waddle)
+set(TARGET_NAME duckdb_opendalfs)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
@@ -26,7 +26,7 @@ set(OPENDAL_ENABLE_TESTING OFF CACHE BOOL "Build OpenDAL's C++ tests" FORCE)
 set(OPENDAL_ENABLE_DOCUMENTATION OFF CACHE BOOL "Build OpenDAL's C++ docs" FORCE)
 add_subdirectory(opendal/bindings/cpp opendal-cpp)
 
-set(EXTENSION_SOURCES src/waddle_extension.cpp)
+set(EXTENSION_SOURCES src/duckdb_opendalfs_extension.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})

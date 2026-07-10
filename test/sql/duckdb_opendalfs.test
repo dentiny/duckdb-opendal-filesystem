@@ -1,0 +1,23 @@
+# name: test/sql/duckdb_opendalfs.test
+# description: test duckdb_opendalfs extension
+# group: [sql]
+
+# Before we load the extension, this will fail
+statement error
+SELECT duckdb_opendalfs('Sam');
+----
+Catalog Error: Scalar Function with name duckdb_opendalfs does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require duckdb_opendalfs
+
+# Confirm the extension works
+query I
+SELECT duckdb_opendalfs('Sam');
+----
+...........🦆 Sam
+
+query I
+SELECT duckdb_opendalfs_opendal_available('Michael');
+----
+DuckDBOpenDALFS Michael, OpenDAL memory service is available
