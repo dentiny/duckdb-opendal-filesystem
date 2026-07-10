@@ -6,3 +6,6 @@
 	path = extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools
 	branch = main
+[submodule "opendal"]
+	path = opendal
+	url = https://github.com/apache/opendal.git

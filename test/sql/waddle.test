@@ -18,6 +18,6 @@ SELECT waddle('Sam');
 ...........🦆 Sam
 
 query I
-SELECT waddle_openssl_version('Michael') ILIKE 'Waddle Michael, my linked OpenSSL version is OpenSSL%';
+SELECT waddle_opendal_available('Michael');
 ----
-true
+Waddle Michael, OpenDAL memory service is available

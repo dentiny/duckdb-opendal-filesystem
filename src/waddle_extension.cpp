@@ -6,8 +6,7 @@
 #include "duckdb/function/scalar_function.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
-// OpenSSL linked through vcpkg
-#include <openssl/opensslv.h>
+#include <opendal.hpp>
 
 namespace duckdb {
 
@@ -18,11 +17,12 @@ inline void WaddleScalarFun(DataChunk &args, ExpressionState &state, Vector &res
 	});
 }
 
-inline void WaddleOpenSSLVersionScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
+inline void WaddleOpenDALAvailableScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &name_vector = args.data[0];
 	UnaryExecutor::Execute<string_t, string_t>(name_vector, result, args.size(), [&](string_t name) {
-		return StringVector::AddString(result, "Waddle " + name.GetString() + ", my linked OpenSSL version is " +
-		                                           OPENSSL_VERSION_TEXT);
+		opendal::Operator op("memory");
+		return StringVector::AddString(result, "Waddle " + name.GetString() + ", OpenDAL memory service is " +
+		                                           (op.Available() ? "available" : "unavailable"));
 	});
 }
 
@@ -33,10 +33,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	loader.RegisterFunction(waddle_scalar_function);
 
-	// Register another scalar function
-	auto waddle_openssl_version_scalar_function = ScalarFunction("waddle_openssl_version", {LogicalType::VARCHAR},
-	                                                             LogicalType::VARCHAR, WaddleOpenSSLVersionScalarFun);
-	loader.RegisterFunction(waddle_openssl_version_scalar_function);
+	// This small probe also ensures that OpenDAL's C++ and Rust objects are
+	// retained and linked into both extension variants.
+	auto waddle_opendal_available_scalar_function =
+	    ScalarFunction("waddle_opendal_available", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                   WaddleOpenDALAvailableScalarFun);
+	loader.RegisterFunction(waddle_opendal_available_scalar_function);
 }
 
 void WaddleExtension::Load(ExtensionLoader &loader) {
