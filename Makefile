@@ -8,7 +8,7 @@ export PATH := $(CARGO_HOME)/bin:$(PATH)
 export MACOSX_DEPLOYMENT_TARGET ?= 15.0
 
 # Configuration of extension
-EXT_NAME=waddle
+EXT_NAME=duckdb_opendalfs
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
 # Include the Makefile from extension-ci-tools
