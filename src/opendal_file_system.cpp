@@ -11,26 +11,6 @@
 
 namespace duckdb {
 
-OpenDALOpenOptions OpenDALOpenOptions::ReadOnly() {
-	return {};
-}
-
-OpenDALOpenOptions OpenDALOpenOptions::WriteOnly(bool truncate_p) {
-	OpenDALOpenOptions options;
-	options.read = false;
-	options.write = true;
-	options.create = true;
-	options.truncate = truncate_p;
-	return options;
-}
-
-OpenDALOpenOptions OpenDALOpenOptions::ReadWrite(bool create_p) {
-	OpenDALOpenOptions options;
-	options.write = true;
-	options.create = create_p;
-	return options;
-}
-
 OpenDALFileSystem::OpenDALFileSystem(string scheme_p, const unordered_map<string, string> &config_p)
     : scheme(std::move(scheme_p)), config(config_p) {
 	auto op = make_uniq<opendal::Operator>(scheme, config);
@@ -43,11 +23,8 @@ unique_ptr<OpenDALFileHandle> OpenDALFileSystem::Open(const string &path_p, Open
 	if (path_p.empty()) {
 		throw InvalidInputException("OpenDAL path must not be empty");
 	}
-	if (!options_p.read && !options_p.write) {
-		throw InvalidInputException("OpenDAL file must be opened for reading or writing");
-	}
-	if ((options_p.create || options_p.truncate || options_p.append) && !options_p.write) {
-		throw InvalidInputException("create, truncate, and append require write access");
+	if (!options_p.IsValid()) {
+		throw InvalidInputException("Invalid OpenDAL file open options");
 	}
 
 	auto op = make_uniq<opendal::Operator>(scheme, config);

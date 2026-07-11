@@ -4,7 +4,8 @@ include_directories(${CMAKE_SOURCE_DIR}/src/include)
 include_directories(${DuckDB_SOURCE_DIR}/third_party)
 include_directories(${DuckDB_SOURCE_DIR}/test/include)
 
-set(OPENDALFS_UNITTEST_OBJECTS main.cpp test_opendal_file_system.cpp)
+set(OPENDALFS_UNITTEST_OBJECTS main.cpp test_opendal_file_system.cpp
+                               test_opendal_open_options.cpp)
 
 add_executable(unittest_duckdb_opendalfs ${OPENDALFS_UNITTEST_OBJECTS})
 target_compile_features(unittest_duckdb_opendalfs PRIVATE cxx_std_17)

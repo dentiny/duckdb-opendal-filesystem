@@ -4,6 +4,7 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/typedefs.hpp"
 #include "duckdb/common/unordered_map.hpp"
+#include "opendal_open_options.hpp"
 
 // Forward declaration.
 namespace opendal {
@@ -13,23 +14,12 @@ class Reader;
 
 namespace duckdb {
 
-struct OpenDALOpenOptions {
-	bool read = true;
-	bool write = false;
-	bool create = false;
-	bool truncate = false;
-	bool append = false;
-
-	static OpenDALOpenOptions ReadOnly();
-	static OpenDALOpenOptions WriteOnly(bool truncate_p = true);
-	static OpenDALOpenOptions ReadWrite(bool create_p = true);
-};
-
 // Forward declaration.
 class OpenDALFileHandle;
 
 class OpenDALFileSystem {
 public:
+	// TODO(hjiang): revisit config to represent the configuration of the OpenDAL operator.
 	explicit OpenDALFileSystem(string scheme_p, const unordered_map<string, string> &config_p = {});
 
 public:
