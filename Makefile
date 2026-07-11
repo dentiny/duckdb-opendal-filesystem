@@ -18,5 +18,17 @@ include extension-ci-tools/makefiles/duckdb_extension.Makefile
 # format this extension's standalone CMake project.
 format-all: format
 	cmake-format -i CMakeLists.txt
+	cmake-format -i test/unittest/CMakeLists.txt
 
 .PHONY: format-all
+
+test_release_unit: release
+	./build/release/extension/duckdb_opendalfs/test/unittest/unittest_duckdb_opendalfs
+
+test_reldebug_unit: reldebug
+	./build/reldebug/extension/duckdb_opendalfs/test/unittest/unittest_duckdb_opendalfs
+
+test_debug_unit: debug
+	./build/debug/extension/duckdb_opendalfs/test/unittest/unittest_duckdb_opendalfs
+
+.PHONY: test_release_unit test_reldebug_unit test_debug_unit
