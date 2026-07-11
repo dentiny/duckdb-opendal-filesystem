@@ -1,12 +1,12 @@
 #include "opendal_file_system.hpp"
 
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/limits.hpp"
 
 #include <opendal.hpp>
 
 #include <algorithm>
 #include <cstring>
-#include <limits>
 #include <utility>
 
 namespace duckdb {
@@ -46,13 +46,13 @@ unique_ptr<OpenDALFileHandle> OpenDALFileSystem::Open(const string &path_p, Open
 	if (!options_p.read && !options_p.write) {
 		throw InvalidInputException("OpenDAL file must be opened for reading or writing");
 	}
-	if ((options_p.truncate || options_p.append) && !options_p.write) {
-		throw InvalidInputException("truncate and append require write access");
+	if ((options_p.create || options_p.truncate || options_p.append) && !options_p.write) {
+		throw InvalidInputException("create, truncate, and append require write access");
 	}
 
 	auto op = make_uniq<opendal::Operator>(scheme, config);
 	const bool exists = op->Exists(path_p);
-	if (!exists && !(options_p.write && options_p.create)) {
+	if (!exists && !options_p.create) {
 		throw IOException("OpenDAL object does not exist: %s", path_p);
 	}
 	return make_uniq<OpenDALFileHandle>(std::move(op), path_p, options_p, exists);
@@ -78,12 +78,7 @@ OpenDALFileHandle::OpenDALFileHandle(unique_ptr<opendal::Operator> op_p, string 
 }
 
 OpenDALFileHandle::~OpenDALFileHandle() noexcept {
-	if (!closed) {
-		try {
-			Close();
-		} catch (...) {
-		}
-	}
+	Close();
 }
 
 void OpenDALFileHandle::EnsureOpen() const {
@@ -123,10 +118,10 @@ idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
 		return read_size;
 	}
 
-	if (offset_p > static_cast<idx_t>(std::numeric_limits<std::streamoff>::max())) {
+	if (offset_p > static_cast<idx_t>(NumericLimits<std::streamoff>::Maximum())) {
 		throw IOException("Read offset exceeds OpenDAL reader range");
 	}
-	if (size_p > static_cast<idx_t>(std::numeric_limits<std::streamsize>::max())) {
+	if (size_p > static_cast<idx_t>(NumericLimits<std::streamsize>::Maximum())) {
 		throw IOException("Read size exceeds OpenDAL reader range");
 	}
 	reader->Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
@@ -153,8 +148,8 @@ idx_t OpenDALFileHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offse
 	if (!buffer_p) {
 		throw InvalidInputException("write buffer must not be null");
 	}
-	if (size_p > std::numeric_limits<std::size_t>::max() ||
-	    offset_p > static_cast<idx_t>(std::numeric_limits<std::size_t>::max()) - size_p) {
+	if (size_p > NumericLimits<std::size_t>::Maximum() ||
+	    offset_p > static_cast<idx_t>(NumericLimits<std::size_t>::Maximum()) - size_p) {
 		throw IOException("Write exceeds addressable object size");
 	}
 	const auto end = static_cast<std::size_t>(offset_p + size_p);
@@ -199,7 +194,7 @@ idx_t OpenDALFileHandle::Size() const {
 
 void OpenDALFileHandle::Truncate(idx_t size_p) {
 	EnsureWritable();
-	if (size_p > std::numeric_limits<std::size_t>::max()) {
+	if (size_p > NumericLimits<std::size_t>::Maximum()) {
 		throw IOException("Truncate size exceeds addressable object size");
 	}
 	data.resize(static_cast<std::size_t>(size_p), '\0');

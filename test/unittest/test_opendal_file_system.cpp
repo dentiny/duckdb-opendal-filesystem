@@ -70,7 +70,7 @@ TEST_CASE("OpenDAL filesystem supports read-write and truncate", "[opendalfs]") 
 	const string replacement = "XY";
 	handle->Write(replacement.data(), replacement.size(), 2);
 	char buffer[8] = {};
-	REQUIRE(handle->Read(buffer, 6, 0) == 6);
+	REQUIRE(handle->Read(buffer, /*size=*/6, /*offset=*/0) == 6);
 	REQUIRE(string(buffer, 6) == "abXYef");
 	handle->Truncate(4);
 	handle->Flush();
