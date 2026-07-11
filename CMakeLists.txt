@@ -32,7 +32,57 @@ set(OPENDAL_ENABLE_TESTING
 set(OPENDAL_ENABLE_DOCUMENTATION
     OFF
     CACHE BOOL "Build OpenDAL's C++ docs" FORCE)
+# OpenDAL registers services at compile time. Enable every storage backend
+# exposed by the pinned OpenDAL revision so one extension binary can select any
+# of them at runtime.
+set(OPENDAL_SERVICE_FEATURES
+    services-aliyun-drive
+    services-azblob
+    services-azdls
+    services-azfile
+    services-b2
+    services-compfs
+    services-cos
+    services-dbfs
+    services-dropbox
+    services-fs
+    services-ftp
+    services-gcs
+    services-gdrive
+    services-github
+    services-hf
+    services-http
+    services-huggingface
+    services-ipfs
+    services-ipmfs
+    services-koofr
+    services-lakefs
+    services-memory
+    services-obs
+    services-onedrive
+    services-oss
+    services-pcloud
+    services-s3
+    services-seafile
+    services-sftp
+    services-swift
+    services-tos
+    services-upyun
+    services-vercel-artifacts
+    services-vercel-blob
+    services-webdav
+    services-yandex-disk)
+list(TRANSFORM OPENDAL_SERVICE_FEATURES PREPEND "opendal/")
+list(JOIN OPENDAL_SERVICE_FEATURES "," OPENDAL_FEATURES_VALUE)
+set(OPENDAL_FEATURES
+    "${OPENDAL_FEATURES_VALUE}"
+    CACHE STRING "OpenDAL storage backend features" FORCE)
 add_subdirectory(opendal/bindings/cpp opendal-cpp)
+
+add_library(duckdb_opendalfs_core STATIC src/opendal_file_system.cpp)
+target_compile_features(duckdb_opendalfs_core PUBLIC cxx_std_17)
+target_include_directories(duckdb_opendalfs_core PUBLIC src/include)
+target_link_libraries(duckdb_opendalfs_core PUBLIC opendal_cpp)
 
 set(EXTENSION_SOURCES src/duckdb_opendalfs_extension.cpp)
 
@@ -47,17 +97,20 @@ target_compile_features(${LOADABLE_EXTENSION_NAME} PRIVATE cxx_std_17)
 
 # Both extension variants must carry OpenDAL: DuckDB's static extension build
 # and the separately loadable .duckdb_extension artifact.
-target_link_libraries(${EXTENSION_NAME} opendal_cpp)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} opendal_cpp)
+target_link_libraries(${EXTENSION_NAME} duckdb_opendalfs_core)
+target_link_libraries(${LOADABLE_EXTENSION_NAME} duckdb_opendalfs_core)
 if(APPLE)
   # Cargo's security-framework crates are embedded in the Rust static archive;
   # their native dependencies must be forwarded to every final consumer.
-  target_link_libraries(opendal_cpp PUBLIC "-framework CoreFoundation"
-                                           "-framework Security")
+  target_link_libraries(
+    opendal_cpp PUBLIC "-framework CoreFoundation" "-framework IOKit"
+                       "-framework Security" "-framework SystemConfiguration")
 endif()
 
 install(
-  TARGETS ${EXTENSION_NAME} opendal_cpp
+  TARGETS ${EXTENSION_NAME} duckdb_opendalfs_core opendal_cpp
   EXPORT "${DUCKDB_EXPORT_SET}"
   LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
   ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
+
+add_subdirectory(test/unittest)
