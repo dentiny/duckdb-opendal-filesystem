@@ -1,0 +1,21 @@
+# name: test/sql/integration/httpfs/copy/csv/parallel/test_parallel_csv.test
+# description: Test parallel read CSV function on ghub bugs
+# group: [parallel]
+
+# TODO: figure out where that bucket went
+mode skip
+
+require duckdb_opendalfs
+
+query II
+select * from read_csv_auto("https://duckdb-public-gzip-test.s3.us-east-2.amazonaws.com/test.csv", header = 0);
+----
+foo	bar
+foo	bar
+
+
+query II
+from read_csv_auto("https://duckdb-public-gzip-test.s3.us-east-2.amazonaws.com/test.csv.gz", header = 0);
+----
+foo	bar
+foo	bar
