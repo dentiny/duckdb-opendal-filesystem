@@ -80,12 +80,18 @@ TEST_CASE("OpenDAL filesystem creates and lists directories in the memory backen
 	REQUIRE_NOTHROW(fs.CreateDirectory("memory://directory/first/"));
 	REQUIRE_NOTHROW(fs.CreateDirectory("memory://directory/second/"));
 	REQUIRE(fs.ListDirectory("memory://directory/").empty());
+	REQUIRE_NOTHROW(fs.RemoveDirectory("memory://directory/first/"));
+	REQUIRE_NOTHROW(fs.RemoveDirectory("memory://directory/second/"));
+	REQUIRE_NOTHROW(fs.RemoveDirectory("memory://directory/"));
 	REQUIRE_THROWS(fs.CreateDirectory("directory/"));
 	REQUIRE_THROWS(fs.CreateDirectory("unknown://directory/"));
 	REQUIRE_THROWS(fs.CreateDirectory("memory://"));
 	REQUIRE_THROWS(fs.ListDirectory("directory/"));
 	REQUIRE_THROWS(fs.ListDirectory("unknown://directory/"));
 	REQUIRE_THROWS(fs.ListDirectory("memory://"));
+	REQUIRE_THROWS(fs.RemoveDirectory("directory/"));
+	REQUIRE_THROWS(fs.RemoveDirectory("unknown://directory/"));
+	REQUIRE_THROWS(fs.RemoveDirectory("memory://"));
 }
 
 TEST_CASE("OpenDAL filesystem validates move paths", "[opendalfs]") {

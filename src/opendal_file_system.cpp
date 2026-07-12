@@ -145,6 +145,18 @@ void OpenDALFileSystem::MoveFile(const string &source_p, const string &target_p)
 	source_op->Remove(source.path);
 }
 
+void OpenDALFileSystem::RemoveDirectory(const string &path_p) {
+	OpenDALPath path;
+	if (!OpenDALPath::TryParse(path_p, path)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
+	}
+	if (path.path.empty()) {
+		throw InvalidInputException("OpenDAL directory path must not be empty");
+	}
+	auto op = make_uniq<opendal::Operator>(path.scheme, config);
+	op->Remove(path.path);
+}
+
 void OpenDALFileSystem::RemoveFile(const string &path_p) {
 	OpenDALPath path;
 	if (!OpenDALPath::TryParse(path_p, path)) {
