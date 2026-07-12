@@ -1,5 +1,6 @@
 #include "opendal_secret.hpp"
 
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/main/secret/secret.hpp"
 
@@ -8,14 +9,14 @@
 namespace duckdb {
 namespace {
 
-static constexpr const char *OPENDAL_SECRET_SERVICES[] = {
+constexpr const char *OPENDAL_SECRET_SERVICES[] = {
     "aliyun_drive", "azblob",  "azdls",      "azfile", "b2",       "cos",   "dbfs",
     "dropbox",      "ftp",     "gcs",        "gdrive", "github",   "hf",    "huggingface",
     "ipfs",         "koofr",   "lakefs",     "obs",    "onedrive", "oss",   "pcloud",
     "s3",           "seafile", "sftp",       "swift",  "tos",      "upyun", "vercel_artifacts",
     "vercel_blob",  "webdav",  "yandex_disk"};
 
-static constexpr const char *OPENDAL_SECRET_PARAMETERS[] = {
+constexpr const char *OPENDAL_SECRET_PARAMETERS[] = {
     "access_key_id", "secret_access_key", "session_token", "region",      "endpoint", "bucket",       "root",
     "token",         "username",          "password",      "key",         "secret",   "account_name", "account_key",
     "client_id",     "client_secret",     "tenant_id",     "private_key", "role_arn"};
@@ -54,7 +55,7 @@ unique_ptr<BaseSecret> CreateOpenDALSecret(ClientContext &context_p, CreateSecre
 
 void RegisterOpenDALSecrets(ExtensionLoader &loader_p) {
 	for (const auto service : OPENDAL_SECRET_SERVICES) {
-		const string type = string("opendal_") + service;
+		const string type = StringUtil::Format("opendal_%s", service);
 		SecretType secret_type;
 		secret_type.name = type;
 		secret_type.deserializer = KeyValueSecret::Deserialize<KeyValueSecret>;

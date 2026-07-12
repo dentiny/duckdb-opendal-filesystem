@@ -10,7 +10,7 @@ struct OpenDALPrefix {
 	std::string_view scheme;
 };
 
-static constexpr OpenDALPrefix OPENDAL_PREFIXES[] = {
+constexpr OpenDALPrefix OPENDAL_PREFIXES[] = {
     {"memory://", "memory"},
     {"s3://", "s3"},
     {"s3a://", "s3"},
