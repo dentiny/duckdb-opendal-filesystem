@@ -69,8 +69,8 @@ public:
 	bool IsManuallySet() override;
 
 private:
-	unordered_map<string, string> ResolveConfig(const OpenDALPath &path_p, const string &full_path_p,
-	                                            optional_ptr<FileOpener> opener_p) const;
+	unique_ptr<opendal::Operator> CreateOperator(const string &uri_p, OpenDALPath &parsed_path_p,
+	                                             optional_ptr<FileOpener> opener_p) const;
 	unordered_map<string, string> config;
 };
 
@@ -110,6 +110,7 @@ private:
 	OpenDALOpenOptions options;
 	string data;
 	idx_t position = 0;
+	idx_t reader_position = 0;
 	bool dirty = false;
 	bool closed = false;
 };

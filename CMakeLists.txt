@@ -79,20 +79,12 @@ set(OPENDAL_FEATURES
 add_subdirectory(opendal/bindings/cpp opendal-cpp)
 
 # OpenDAL installs its default HTTP transporter from a Rust static constructor.
-# Retain the entire Rust archive so that constructor is not discarded by the
-# final executable or extension link. This keeps the pinned binding unchanged.
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(OPENDAL_RUST_LIB
-      "${CMAKE_CURRENT_LIST_DIR}/opendal/bindings/cpp/target/release/${CMAKE_STATIC_LIBRARY_PREFIX}opendal_cpp${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  )
-else()
-  set(OPENDAL_RUST_LIB
-      "${CMAKE_CURRENT_LIST_DIR}/opendal/bindings/cpp/target/debug/${CMAKE_STATIC_LIBRARY_PREFIX}opendal_cpp${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  )
-endif()
+# Retain the Rust archive published by the binding so that constructor is not
+# discarded by the final executable or extension link.
 if(APPLE OR (UNIX AND NOT WIN32))
   get_target_property(OPENDAL_CPP_INTERFACE_LIBS opendal_cpp
                       INTERFACE_LINK_LIBRARIES)
+  list(GET OPENDAL_CPP_INTERFACE_LIBS 0 OPENDAL_RUST_LIB)
   list(REMOVE_ITEM OPENDAL_CPP_INTERFACE_LIBS "${OPENDAL_RUST_LIB}")
   set_target_properties(opendal_cpp PROPERTIES INTERFACE_LINK_LIBRARIES
                                                "${OPENDAL_CPP_INTERFACE_LIBS}")

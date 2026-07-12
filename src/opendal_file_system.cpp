@@ -15,36 +15,31 @@
 #include <utility>
 
 namespace duckdb {
-namespace {
-
-unique_ptr<opendal::Operator> CreateOperator(const OpenDALPath &path_p, const unordered_map<string, string> &config_p) {
-	auto config = config_p;
-	for (const auto &entry : path_p.uri_config) {
-		config[entry.first] = entry.second;
-	}
-	return make_uniq<opendal::Operator>(path_p.scheme, config);
-}
-
-} // namespace
-
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
 }
 
-unordered_map<string, string> OpenDALFileSystem::ResolveConfig(const OpenDALPath &path_p, const string &full_path_p,
-                                                               optional_ptr<FileOpener> opener_p) const {
+unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &uri_p, OpenDALPath &parsed_path_p,
+                                                                optional_ptr<FileOpener> opener_p) const {
+	if (!OpenDALPath::TryParse(uri_p, parsed_path_p)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", uri_p);
+	}
 	auto result = config;
+	for (const auto &entry : parsed_path_p.uri_config) {
+		result[entry.first] = entry.second;
+	}
 	auto secret_manager = FileOpener::TryGetSecretManager(opener_p);
 	auto transaction = FileOpener::TryGetCatalogTransaction(opener_p);
 	if (!secret_manager || !transaction) {
-		return result;
+		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
 	}
 
-	if (path_p.secret_type.empty()) {
-		return result;
+	if (parsed_path_p.secret_type == OpenDALSecretType::NONE) {
+		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
 	}
-	auto secret_match = secret_manager->LookupSecret(*transaction, full_path_p, path_p.secret_type);
+	auto secret_match =
+	    secret_manager->LookupSecret(*transaction, uri_p, OpenDALSecretTypeName(parsed_path_p.secret_type));
 	if (!secret_match.HasMatch()) {
-		return result;
+		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
 	}
 	const auto &secret = dynamic_cast<const KeyValueSecret &>(*secret_match.secret_entry->secret);
 	for (const auto &entry : secret.secret_map) {
@@ -54,7 +49,7 @@ unordered_map<string, string> OpenDALFileSystem::ResolveConfig(const OpenDALPath
 		}
 		result[key] = entry.second.ToString();
 	}
-	return result;
+	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
 }
 
 unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpenFlags flags_p,
@@ -67,32 +62,29 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 		throw InvalidInputException("Invalid OpenDAL file open options");
 	}
 
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path)) {
-		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
-	}
-	if (path.path.empty()) {
+	OpenDALPath parsed_path;
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	if (parsed_path.path.empty()) {
 		throw InvalidInputException("OpenDAL object path must not be empty");
 	}
 
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	const bool exists = op->Exists(path.path);
+	const bool exists = op->Exists(parsed_path.path);
 	if (!exists && !options.create) {
 		if (flags_p.ReturnNullIfNotExists()) {
 			return nullptr;
 		}
 		throw IOException("OpenDAL object does not exist: %s", path_p);
 	}
-	return make_uniq<OpenDALFileHandle>(*this, std::move(op), path_p, std::move(path.path), flags_p, options);
+	return make_uniq<OpenDALFileHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p, options);
 }
 
 bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener> opener_p) {
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
+	OpenDALPath parsed_path;
+	if (!OpenDALPath::TryParse(path_p, parsed_path) || parsed_path.path.empty()) {
 		return false;
 	}
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	return op->Exists(path.path);
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	return op->Exists(parsed_path.path);
 }
 
 int64_t OpenDALFileSystem::GetFileSize(FileHandle &handle_p) {
@@ -194,15 +186,12 @@ void OpenDALFileSystem::Truncate(FileHandle &handle_p, int64_t size_p) {
 }
 
 void OpenDALFileSystem::CreateDirectory(const string &path_p, optional_ptr<FileOpener> opener_p) {
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path)) {
-		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
-	}
-	if (path.path.empty()) {
+	OpenDALPath parsed_path;
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	if (parsed_path.path.empty()) {
 		throw InvalidInputException("OpenDAL directory path must not be empty");
 	}
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	op->CreateDir(path.path);
+	op->CreateDir(parsed_path.path);
 }
 
 void OpenDALFileSystem::CreateDirectoriesRecursive(const string &path_p, optional_ptr<FileOpener> opener_p) {
@@ -210,25 +199,22 @@ void OpenDALFileSystem::CreateDirectoriesRecursive(const string &path_p, optiona
 }
 
 bool OpenDALFileSystem::DirectoryExists(const string &path_p, optional_ptr<FileOpener> opener_p) {
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
+	OpenDALPath parsed_path;
+	if (!OpenDALPath::TryParse(path_p, parsed_path) || parsed_path.path.empty()) {
 		return false;
 	}
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	return op->Stat(path.path).IsDir();
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	return op->Stat(parsed_path.path).IsDir();
 }
 
 bool OpenDALFileSystem::ListFiles(const string &path_p, const std::function<void(const string &, bool)> &callback_p,
                                   FileOpener *opener_p) {
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path)) {
-		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
-	}
-	if (path.path.empty()) {
+	OpenDALPath parsed_path;
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	if (parsed_path.path.empty()) {
 		throw InvalidInputException("OpenDAL directory path must not be empty");
 	}
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	auto entries = op->List(path.path);
+	auto entries = op->List(parsed_path.path);
 	for (const auto &entry : entries) {
 		callback_p(entry.path, !entry.path.empty() && entry.path.back() == '/');
 	}
@@ -250,42 +236,36 @@ void OpenDALFileSystem::MoveFile(const string &source_p, const string &target_p,
 
 	// Fast path: same scheme.
 	if (source.scheme == target.scheme) {
-		auto op = CreateOperator(source, ResolveConfig(source, source_p, opener_p));
+		auto op = CreateOperator(source_p, source, opener_p);
 		op->Rename(source.path, target.path);
 		return;
 	}
 
 	// Fallback to read and write.
 	// TODO(hjiang): parallel read and write.
-	auto source_op = CreateOperator(source, ResolveConfig(source, source_p, opener_p));
-	auto target_op = CreateOperator(target, ResolveConfig(target, target_p, opener_p));
+	auto source_op = CreateOperator(source_p, source, opener_p);
+	auto target_op = CreateOperator(target_p, target, opener_p);
 	auto data = source_op->Read(source.path);
 	target_op->Write(target.path, data);
 	source_op->Remove(source.path);
 }
 
 void OpenDALFileSystem::RemoveDirectory(const string &path_p, optional_ptr<FileOpener> opener_p) {
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path)) {
-		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
-	}
-	if (path.path.empty()) {
+	OpenDALPath parsed_path;
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	if (parsed_path.path.empty()) {
 		throw InvalidInputException("OpenDAL directory path must not be empty");
 	}
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	op->Remove(path.path);
+	op->Remove(parsed_path.path);
 }
 
 void OpenDALFileSystem::RemoveFile(const string &path_p, optional_ptr<FileOpener> opener_p) {
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path)) {
-		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
-	}
-	if (path.path.empty()) {
+	OpenDALPath parsed_path;
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	if (parsed_path.path.empty()) {
 		throw InvalidInputException("OpenDAL object path must not be empty");
 	}
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	op->Remove(path.path);
+	op->Remove(parsed_path.path);
 }
 
 // TODO(hjiang): investigate batch deletion API.
@@ -303,19 +283,19 @@ void OpenDALFileSystem::RemoveFiles(const vector<string> &paths_p, optional_ptr<
 		paths.emplace_back(std::move(path));
 	}
 	for (idx_t index = 0; index < paths.size(); index++) {
-		const auto &path = paths[index];
-		auto op = CreateOperator(path, ResolveConfig(path, paths_p[index], opener_p));
-		op->Remove(path.path);
+		auto &parsed_path = paths[index];
+		auto op = CreateOperator(paths_p[index], parsed_path, opener_p);
+		op->Remove(parsed_path.path);
 	}
 }
 
 bool OpenDALFileSystem::TryRemoveFile(const string &path_p, optional_ptr<FileOpener> opener_p) {
-	OpenDALPath path;
-	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
+	OpenDALPath parsed_path;
+	if (!OpenDALPath::TryParse(path_p, parsed_path) || parsed_path.path.empty()) {
 		return false;
 	}
-	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	op->Remove(path.path);
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	op->Remove(parsed_path.path);
 	return true;
 }
 
@@ -434,21 +414,28 @@ idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
 	if (size_p > static_cast<idx_t>(NumericLimits<std::streamsize>::Maximum())) {
 		throw IOException("Read size exceeds OpenDAL reader range");
 	}
-	reader->Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
+	if (offset_p != reader_position) {
+		reader->Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
+		reader_position = offset_p;
+	}
 	const auto read_size = reader->Read(buffer_p, static_cast<std::streamsize>(size_p));
-	return read_size > 0 ? static_cast<idx_t>(read_size) : 0;
+	if (read_size <= 0) {
+		return 0;
+	}
+	reader_position += static_cast<idx_t>(read_size);
+	return static_cast<idx_t>(read_size);
 }
 
 idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p) {
 	EnsureReadable();
-	const auto read_size = ReadAt(buffer_p, size_p, position);
-	position += read_size;
-	return read_size;
+	return Read(buffer_p, size_p, position);
 }
 
 idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p, idx_t offset_p) {
 	EnsureReadable();
-	return ReadAt(buffer_p, size_p, offset_p);
+	const auto read_size = ReadAt(buffer_p, size_p, offset_p);
+	position = offset_p + read_size;
+	return read_size;
 }
 
 idx_t OpenDALFileHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offset_p) {
