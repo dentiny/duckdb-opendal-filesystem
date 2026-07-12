@@ -6,7 +6,6 @@ namespace duckdb {
 TEST_CASE("OpenDAL open options validate access modes", "[opendalfs]") {
 	REQUIRE(OpenDALOpenOptions::ReadOnly().IsValid());
 	REQUIRE(OpenDALOpenOptions::WriteOnly().IsValid());
-	REQUIRE(OpenDALOpenOptions::ReadWrite().IsValid());
 
 	OpenDALOpenOptions options;
 	options.read = false;
@@ -21,6 +20,11 @@ TEST_CASE("OpenDAL open options validate access modes", "[opendalfs]") {
 
 	options.truncate = false;
 	options.append = true;
+	REQUIRE(!options.IsValid());
+
+	options.append = false;
+	options.read = true;
+	options.write = true;
 	REQUIRE(!options.IsValid());
 }
 
