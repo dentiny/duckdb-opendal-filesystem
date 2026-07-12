@@ -1,8 +1,8 @@
 #include "opendal_file_system.hpp"
-#include "opendal_path.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/limits.hpp"
+#include "opendal_path.hpp"
 
 #include <opendal.hpp>
 
@@ -58,6 +58,24 @@ void OpenDALFileSystem::CreateDirectory(const string &path_p) {
 	}
 	auto op = make_uniq<opendal::Operator>(path.scheme, config);
 	op->CreateDir(path.path);
+}
+
+vector<string> OpenDALFileSystem::ListDirectory(const string &path_p) const {
+	OpenDALPath path;
+	if (!OpenDALPath::TryParse(path_p, path)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
+	}
+	if (path.path.empty()) {
+		throw InvalidInputException("OpenDAL directory path must not be empty");
+	}
+	auto op = make_uniq<opendal::Operator>(path.scheme, config);
+	auto entries = op->List(path.path);
+	vector<string> result;
+	result.reserve(entries.size());
+	for (auto &entry : entries) {
+		result.emplace_back(std::move(entry.path));
+	}
+	return result;
 }
 
 void OpenDALFileSystem::RemoveFile(const string &path_p) {
