@@ -31,7 +31,7 @@ TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory 
 	REQUIRE_THROWS(fs.GetFileSize("hello.txt"));
 	REQUIRE_THROWS(fs.GetFileSize("unknown://hello.txt"));
 	REQUIRE_THROWS(fs.GetFileSize("memory://"));
-	writer->Flush();
+	fs.FileSync(*writer);
 	writer->Close();
 	writer->Close();
 

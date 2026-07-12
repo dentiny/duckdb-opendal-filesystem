@@ -60,6 +60,10 @@ idx_t OpenDALFileSystem::GetFileSize(const string &path_p) const {
 	return op->Stat(path.path).ContentLength();
 }
 
+void OpenDALFileSystem::FileSync(OpenDALFileHandle &handle_p) {
+	handle_p.Flush();
+}
+
 void OpenDALFileSystem::CopyFile(const string &source_p, const string &target_p) {
 	OpenDALPath source;
 	OpenDALPath target;
