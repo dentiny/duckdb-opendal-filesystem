@@ -178,6 +178,16 @@ void OpenDALFileSystem::RemoveFile(const string &path_p) {
 	op->Remove(path.path);
 }
 
+bool OpenDALFileSystem::TryRemoveFile(const string &path_p) {
+	OpenDALPath path;
+	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
+		return false;
+	}
+	auto op = make_uniq<opendal::Operator>(path.scheme, config);
+	op->Remove(path.path);
+	return true;
+}
+
 bool OpenDALFileSystem::CanHandleFile(const string &path_p) const {
 	OpenDALPath path;
 	return OpenDALPath::TryParse(path_p, path);

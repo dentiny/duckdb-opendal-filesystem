@@ -34,6 +34,7 @@ public:
 	void MoveFile(const string &source_p, const string &target_p);
 	void RemoveDirectory(const string &path_p);
 	void RemoveFile(const string &path_p);
+	bool TryRemoveFile(const string &path_p);
 	bool CanHandleFile(const string &path_p) const;
 	// Accept filepath directly.
 	bool IsManuallySet() const;
