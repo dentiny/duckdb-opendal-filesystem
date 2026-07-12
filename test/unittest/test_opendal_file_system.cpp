@@ -62,4 +62,13 @@ TEST_CASE("OpenDAL filesystem rejects invalid paths and closed handles", "[opend
 	REQUIRE_THROWS(writer->Write("x", 1));
 }
 
+TEST_CASE("OpenDAL filesystem removes objects from the memory backend", "[opendalfs]") {
+	OpenDALFileSystem fs;
+
+	REQUIRE_NOTHROW(fs.RemoveFile("memory://removed.txt"));
+	REQUIRE_THROWS(fs.RemoveFile("removed.txt"));
+	REQUIRE_THROWS(fs.RemoveFile("unknown://removed.txt"));
+	REQUIRE_THROWS(fs.RemoveFile("memory://"));
+}
+
 } // namespace duckdb
