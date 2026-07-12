@@ -48,6 +48,18 @@ bool OpenDALFileSystem::Exists(const string &path_p) const {
 	return op->Exists(path.path);
 }
 
+idx_t OpenDALFileSystem::GetFileSize(const string &path_p) const {
+	OpenDALPath path;
+	if (!OpenDALPath::TryParse(path_p, path)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
+	}
+	if (path.path.empty()) {
+		throw InvalidInputException("OpenDAL object path must not be empty");
+	}
+	auto op = make_uniq<opendal::Operator>(path.scheme, config);
+	return op->Stat(path.path).ContentLength();
+}
+
 void OpenDALFileSystem::CopyFile(const string &source_p, const string &target_p) {
 	OpenDALPath source;
 	OpenDALPath target;

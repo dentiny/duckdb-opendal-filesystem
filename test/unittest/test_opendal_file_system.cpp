@@ -19,7 +19,7 @@ TEST_CASE("OpenDAL filesystem handles registered prefixes only", "[opendalfs]") 
 	REQUIRE(!fs.CanHandleFile("unknown://hello.txt"));
 }
 
-TEST_CASE("OpenDAL filesystem writes to the memory backend", "[opendalfs]") {
+TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory backend", "[opendalfs]") {
 	OpenDALFileSystem fs;
 	auto writer = fs.Open("memory://hello.txt", OpenDALOpenOptions::WriteOnly());
 	const string hello = "hello";
@@ -28,15 +28,17 @@ TEST_CASE("OpenDAL filesystem writes to the memory backend", "[opendalfs]") {
 	REQUIRE(writer->Write(suffix.data(), suffix.size()) == suffix.size());
 	REQUIRE(writer->Tell() == 11);
 	REQUIRE(writer->Size() == 11);
+	REQUIRE_THROWS(fs.GetFileSize("hello.txt"));
+	REQUIRE_THROWS(fs.GetFileSize("unknown://hello.txt"));
+	REQUIRE_THROWS(fs.GetFileSize("memory://"));
 	writer->Flush();
 	writer->Close();
 	writer->Close();
-}
 
-TEST_CASE("OpenDAL file handle reads from the memory backend", "[opendalfs]") {
 	auto op = make_uniq<opendal::Operator>("memory");
 	op->Write("hello.txt", "hello world");
 	OpenDALFileHandle reader(std::move(op), "hello.txt", OpenDALOpenOptions::ReadOnly());
+	REQUIRE(reader.Size() == 11);
 
 	char buffer[16] = {};
 	REQUIRE(reader.Read(buffer, 5) == 5);
