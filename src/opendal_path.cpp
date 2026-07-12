@@ -61,10 +61,16 @@ bool OpenDALPath::TryParse(const string &path_p, OpenDALPath &result_p) {
 			result_p.scheme.assign(entry.scheme.data(), entry.scheme.size());
 			result_p.path = path_p.substr(entry.prefix.size());
 			result_p.endpoint.clear();
+			result_p.bucket.clear();
 			if (result_p.scheme == "http") {
 				const auto slash = result_p.path.find('/');
 				const auto authority_size = slash == string::npos ? result_p.path.size() : slash;
 				result_p.endpoint = path_p.substr(0, entry.prefix.size() + authority_size);
+				result_p.path = slash == string::npos ? string() : result_p.path.substr(slash + 1);
+			}
+			if (result_p.scheme == "s3") {
+				const auto slash = result_p.path.find('/');
+				result_p.bucket = result_p.path.substr(0, slash);
 				result_p.path = slash == string::npos ? string() : result_p.path.substr(slash + 1);
 			}
 			return true;

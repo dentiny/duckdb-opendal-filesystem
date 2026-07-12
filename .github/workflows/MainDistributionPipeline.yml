@@ -4,10 +4,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' && github.sha || '' }}
-  cancel-in-progress: true
-
 jobs:
   minio-test:
     name: MinIO S3 secret integration

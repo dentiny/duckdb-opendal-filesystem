@@ -22,6 +22,9 @@ unique_ptr<opendal::Operator> CreateOperator(const OpenDALPath &path_p, const un
 	if (!path_p.endpoint.empty()) {
 		config["endpoint"] = path_p.endpoint;
 	}
+	if (!path_p.bucket.empty()) {
+		config["bucket"] = path_p.bucket;
+	}
 	return make_uniq<opendal::Operator>(path_p.scheme, config);
 }
 

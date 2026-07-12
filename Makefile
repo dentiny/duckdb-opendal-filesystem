@@ -31,4 +31,14 @@ test_reldebug_unit: reldebug
 test_debug_unit: debug
 	./build/debug/extension/duckdb_opendalfs/test/unittest/unittest_duckdb_opendalfs
 
-.PHONY: test_release_unit test_reldebug_unit test_debug_unit
+minio-up:
+	docker compose -f test/minio/docker-compose.yml up -d --wait minio
+	docker compose -f test/minio/docker-compose.yml run --rm minio-init
+
+minio-down:
+	docker compose -f test/minio/docker-compose.yml down -v
+
+test_reldebug_minio: reldebug minio-up
+	OPENDALFS_MINIO_AVAILABLE=1 ./build/reldebug/test/unittest test/sql/opendal_s3_minio.test
+
+.PHONY: test_release_unit test_reldebug_unit test_debug_unit minio-up minio-down test_reldebug_minio

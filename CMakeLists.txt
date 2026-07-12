@@ -78,6 +78,34 @@ set(OPENDAL_FEATURES
     CACHE STRING "OpenDAL storage backend features" FORCE)
 add_subdirectory(opendal/bindings/cpp opendal-cpp)
 
+# OpenDAL installs its default HTTP transporter from a Rust static constructor.
+# Retain the entire Rust archive so that constructor is not discarded by the
+# final executable or extension link. This keeps the pinned binding unchanged.
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(OPENDAL_RUST_LIB
+      "${CMAKE_CURRENT_LIST_DIR}/opendal/bindings/cpp/target/release/${CMAKE_STATIC_LIBRARY_PREFIX}opendal_cpp${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+else()
+  set(OPENDAL_RUST_LIB
+      "${CMAKE_CURRENT_LIST_DIR}/opendal/bindings/cpp/target/debug/${CMAKE_STATIC_LIBRARY_PREFIX}opendal_cpp${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+endif()
+if(APPLE OR (UNIX AND NOT WIN32))
+  get_target_property(OPENDAL_CPP_INTERFACE_LIBS opendal_cpp
+                      INTERFACE_LINK_LIBRARIES)
+  list(REMOVE_ITEM OPENDAL_CPP_INTERFACE_LIBS "${OPENDAL_RUST_LIB}")
+  set_target_properties(opendal_cpp PROPERTIES INTERFACE_LINK_LIBRARIES
+                                               "${OPENDAL_CPP_INTERFACE_LIBS}")
+  if(APPLE)
+    target_link_libraries(opendal_cpp
+                          INTERFACE "-Wl,-force_load,${OPENDAL_RUST_LIB}")
+  else()
+    target_link_libraries(
+      opendal_cpp INTERFACE "-Wl,--whole-archive" "${OPENDAL_RUST_LIB}"
+                            "-Wl,--no-whole-archive")
+  endif()
+endif()
+
 add_library(
   duckdb_opendalfs_core STATIC
   src/opendal_file_system.cpp src/opendal_open_options.cpp src/opendal_path.cpp
