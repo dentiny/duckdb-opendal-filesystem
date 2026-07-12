@@ -10,6 +10,8 @@ namespace duckdb {
 TEST_CASE("OpenDAL filesystem handles registered prefixes only", "[opendalfs]") {
 	OpenDALFileSystem fs;
 
+	REQUIRE(fs.CanSeek());
+	REQUIRE(!fs.IsLocalFileSystem());
 	REQUIRE(fs.CanHandleFile("memory://hello.txt"));
 	REQUIRE(fs.CanHandleFile("s3://bucket/key"));
 	REQUIRE(fs.CanHandleFile("https://example.com/file"));

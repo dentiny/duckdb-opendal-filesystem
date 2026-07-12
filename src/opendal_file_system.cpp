@@ -217,6 +217,14 @@ bool OpenDALFileSystem::CanHandleFile(const string &path_p) const {
 	return OpenDALPath::TryParse(path_p, path);
 }
 
+bool OpenDALFileSystem::CanSeek() const {
+	return true;
+}
+
+bool OpenDALFileSystem::IsLocalFileSystem() const {
+	return false;
+}
+
 bool OpenDALFileSystem::IsManuallySet() const {
 	return true;
 }
