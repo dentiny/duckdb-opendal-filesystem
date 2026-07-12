@@ -2,6 +2,12 @@
 
 namespace duckdb {
 
+OpenDALOpenOptions::OpenDALOpenOptions(FileOpenFlags flags_p)
+    : read(flags_p.OpenForReading()), write(flags_p.OpenForWriting()),
+      create(flags_p.CreateFileIfNotExists() || flags_p.OverwriteExistingFile()),
+      truncate(flags_p.OverwriteExistingFile()), append(flags_p.OpenForAppending()) {
+}
+
 OpenDALOpenOptions OpenDALOpenOptions::ReadOnly() {
 	return {};
 }
