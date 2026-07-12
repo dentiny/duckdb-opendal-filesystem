@@ -1,4 +1,5 @@
 #include "opendal_file_system.hpp"
+#include "opendal_path.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/limits.hpp"
@@ -11,12 +12,7 @@
 
 namespace duckdb {
 
-OpenDALFileSystem::OpenDALFileSystem(string scheme_p, const unordered_map<string, string> &config_p)
-    : scheme(std::move(scheme_p)), config(config_p) {
-	auto op = make_uniq<opendal::Operator>(scheme, config);
-	if (!op->Available()) {
-		throw IOException("OpenDAL operator is unavailable");
-	}
+OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
 }
 
 unique_ptr<OpenDALFileHandle> OpenDALFileSystem::Open(const string &path_p, OpenDALOpenOptions options_p) {
@@ -27,28 +23,44 @@ unique_ptr<OpenDALFileHandle> OpenDALFileSystem::Open(const string &path_p, Open
 		throw InvalidInputException("Invalid OpenDAL file open options");
 	}
 
-	auto op = make_uniq<opendal::Operator>(scheme, config);
-	const bool exists = op->Exists(path_p);
+	OpenDALPath path;
+	if (!OpenDALPath::TryParse(path_p, path)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_p);
+	}
+	if (path.path.empty()) {
+		throw InvalidInputException("OpenDAL object path must not be empty");
+	}
+
+	auto op = make_uniq<opendal::Operator>(path.scheme, config);
+	const bool exists = op->Exists(path.path);
 	if (!exists && !options_p.create) {
 		throw IOException("OpenDAL object does not exist: %s", path_p);
 	}
-	return make_uniq<OpenDALFileHandle>(std::move(op), path_p, options_p, exists);
+	return make_uniq<OpenDALFileHandle>(std::move(op), std::move(path.path), options_p);
 }
 
 bool OpenDALFileSystem::Exists(const string &path_p) const {
-	auto op = make_uniq<opendal::Operator>(scheme, config);
-	return op->Exists(path_p);
+	OpenDALPath path;
+	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
+		return false;
+	}
+	auto op = make_uniq<opendal::Operator>(path.scheme, config);
+	return op->Exists(path.path);
 }
 
-OpenDALFileHandle::OpenDALFileHandle(unique_ptr<opendal::Operator> op_p, string path_p, OpenDALOpenOptions options_p,
-                                     bool exists_p)
+bool OpenDALFileSystem::CanHandleFile(const string &path_p) const {
+	OpenDALPath path;
+	return OpenDALPath::TryParse(path_p, path);
+}
+
+bool OpenDALFileSystem::IsManuallySet() const {
+	return true;
+}
+
+OpenDALFileHandle::OpenDALFileHandle(unique_ptr<opendal::Operator> op_p, string path_p, OpenDALOpenOptions options_p)
     : op(std::move(op_p)), path(std::move(path_p)), options(options_p) {
 	if (options.write) {
-		if (exists_p && !options.truncate) {
-			data = op->Read(path);
-		}
-		dirty = !exists_p || options.truncate;
-		position = options.append ? data.size() : 0;
+		dirty = true;
 	} else {
 		reader = make_uniq<opendal::Reader>(op->GetReader(path));
 	}
@@ -140,7 +152,7 @@ idx_t OpenDALFileHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offse
 
 idx_t OpenDALFileHandle::Write(const void *buffer_p, idx_t size_p) {
 	EnsureWritable();
-	const auto offset = options.append ? data.size() : position;
+	const auto offset = position;
 	const auto write_size = WriteAt(buffer_p, size_p, offset);
 	position = offset + write_size;
 	return write_size;
@@ -148,7 +160,10 @@ idx_t OpenDALFileHandle::Write(const void *buffer_p, idx_t size_p) {
 
 idx_t OpenDALFileHandle::Write(const void *buffer_p, idx_t size_p, idx_t offset_p) {
 	EnsureWritable();
-	return WriteAt(buffer_p, size_p, offset_p);
+	if (offset_p != position) {
+		throw IOException("Non-sequential OpenDAL writes are not supported");
+	}
+	return Write(buffer_p, size_p);
 }
 
 void OpenDALFileHandle::Seek(idx_t offset_p) {

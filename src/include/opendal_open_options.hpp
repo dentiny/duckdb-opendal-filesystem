@@ -10,8 +10,7 @@ struct OpenDALOpenOptions {
 	bool append = false;
 
 	static OpenDALOpenOptions ReadOnly();
-	static OpenDALOpenOptions WriteOnly(bool truncate_p = true);
-	static OpenDALOpenOptions ReadWrite(bool create_p = true);
+	static OpenDALOpenOptions WriteOnly();
 
 	bool IsValid() const;
 };

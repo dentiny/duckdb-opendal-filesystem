@@ -20,20 +20,21 @@ class OpenDALFileHandle;
 class OpenDALFileSystem {
 public:
 	// TODO(hjiang): revisit config to represent the configuration of the OpenDAL operator.
-	explicit OpenDALFileSystem(string scheme_p, const unordered_map<string, string> &config_p = {});
+	explicit OpenDALFileSystem(const unordered_map<string, string> &config_p = {});
 
 public:
 	unique_ptr<OpenDALFileHandle> Open(const string &path_p, OpenDALOpenOptions options_p);
 	bool Exists(const string &path_p) const;
+	bool CanHandleFile(const string &path_p) const;
+	bool IsManuallySet() const;
 
 private:
-	string scheme;
 	unordered_map<string, string> config;
 };
 
 class OpenDALFileHandle {
 public:
-	OpenDALFileHandle(unique_ptr<opendal::Operator> op_p, string path_p, OpenDALOpenOptions options_p, bool exists_p);
+	OpenDALFileHandle(unique_ptr<opendal::Operator> op_p, string path_p, OpenDALOpenOptions options_p);
 	~OpenDALFileHandle() noexcept;
 	OpenDALFileHandle(const OpenDALFileHandle &) = delete;
 	OpenDALFileHandle &operator=(const OpenDALFileHandle &) = delete;

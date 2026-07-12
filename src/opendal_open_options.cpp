@@ -6,19 +6,12 @@ OpenDALOpenOptions OpenDALOpenOptions::ReadOnly() {
 	return {};
 }
 
-OpenDALOpenOptions OpenDALOpenOptions::WriteOnly(bool truncate_p) {
+OpenDALOpenOptions OpenDALOpenOptions::WriteOnly() {
 	OpenDALOpenOptions options;
 	options.read = false;
 	options.write = true;
 	options.create = true;
-	options.truncate = truncate_p;
-	return options;
-}
-
-OpenDALOpenOptions OpenDALOpenOptions::ReadWrite(bool create_p) {
-	OpenDALOpenOptions options;
-	options.write = true;
-	options.create = create_p;
+	options.truncate = true;
 	return options;
 }
 
@@ -26,7 +19,13 @@ bool OpenDALOpenOptions::IsValid() const {
 	if (!read && !write) {
 		return false;
 	}
+	if (read && write) {
+		return false;
+	}
 	if ((create || truncate || append) && !write) {
+		return false;
+	}
+	if (append) {
 		return false;
 	}
 	return true;
