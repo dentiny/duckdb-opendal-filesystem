@@ -68,6 +68,10 @@ TEST_CASE("OpenDAL filesystem removes objects from the memory backend", "[openda
 	OpenDALFileSystem fs;
 
 	REQUIRE_NOTHROW(fs.RemoveFile("memory://removed.txt"));
+	REQUIRE(fs.TryRemoveFile("memory://removed.txt"));
+	REQUIRE(!fs.TryRemoveFile("removed.txt"));
+	REQUIRE(!fs.TryRemoveFile("unknown://removed.txt"));
+	REQUIRE(!fs.TryRemoveFile("memory://"));
 	REQUIRE_THROWS(fs.RemoveFile("removed.txt"));
 	REQUIRE_THROWS(fs.RemoveFile("unknown://removed.txt"));
 	REQUIRE_THROWS(fs.RemoveFile("memory://"));
