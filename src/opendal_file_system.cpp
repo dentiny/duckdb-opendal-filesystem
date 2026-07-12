@@ -178,6 +178,26 @@ void OpenDALFileSystem::RemoveFile(const string &path_p) {
 	op->Remove(path.path);
 }
 
+// TODO(hjiang): investigate batch deletion API.
+void OpenDALFileSystem::RemoveFiles(const vector<string> &paths_p) {
+	vector<OpenDALPath> paths;
+	paths.reserve(paths_p.size());
+	for (const auto &path_string : paths_p) {
+		OpenDALPath path;
+		if (!OpenDALPath::TryParse(path_string, path)) {
+			throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_string);
+		}
+		if (path.path.empty()) {
+			throw InvalidInputException("OpenDAL object path must not be empty");
+		}
+		paths.emplace_back(std::move(path));
+	}
+	for (const auto &path : paths) {
+		auto op = make_uniq<opendal::Operator>(path.scheme, config);
+		op->Remove(path.path);
+	}
+}
+
 bool OpenDALFileSystem::TryRemoveFile(const string &path_p) {
 	OpenDALPath path;
 	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
