@@ -98,6 +98,15 @@ void OpenDALFileSystem::CreateDirectory(const string &path_p) {
 	op->CreateDir(path.path);
 }
 
+bool OpenDALFileSystem::DirectoryExists(const string &path_p) const {
+	OpenDALPath path;
+	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
+		return false;
+	}
+	auto op = make_uniq<opendal::Operator>(path.scheme, config);
+	return op->Stat(path.path).IsDir();
+}
+
 vector<string> OpenDALFileSystem::ListDirectory(const string &path_p) const {
 	OpenDALPath path;
 	if (!OpenDALPath::TryParse(path_p, path)) {
