@@ -4,6 +4,7 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/typedefs.hpp"
 #include "duckdb/common/unordered_map.hpp"
+#include "duckdb/common/vector.hpp"
 #include "opendal_open_options.hpp"
 
 // Forward declaration.
@@ -26,6 +27,7 @@ public:
 	unique_ptr<OpenDALFileHandle> Open(const string &path_p, OpenDALOpenOptions options_p);
 	bool Exists(const string &path_p) const;
 	void CreateDirectory(const string &path_p);
+	vector<string> ListDirectory(const string &path_p) const;
 	void RemoveFile(const string &path_p);
 	bool CanHandleFile(const string &path_p) const;
 	// Accept filepath directly.
