@@ -60,6 +60,13 @@ bool OpenDALPath::TryParse(const string &path_p, OpenDALPath &result_p) {
 		if (path_p.compare(0, entry.prefix.size(), entry.prefix.data(), entry.prefix.size()) == 0) {
 			result_p.scheme.assign(entry.scheme.data(), entry.scheme.size());
 			result_p.path = path_p.substr(entry.prefix.size());
+			result_p.endpoint.clear();
+			if (result_p.scheme == "http") {
+				const auto slash = result_p.path.find('/');
+				const auto authority_size = slash == string::npos ? result_p.path.size() : slash;
+				result_p.endpoint = path_p.substr(0, entry.prefix.size() + authority_size);
+				result_p.path = slash == string::npos ? string() : result_p.path.substr(slash + 1);
+			}
 			return true;
 		}
 	}
