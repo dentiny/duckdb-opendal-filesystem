@@ -71,4 +71,13 @@ TEST_CASE("OpenDAL filesystem removes objects from the memory backend", "[openda
 	REQUIRE_THROWS(fs.RemoveFile("memory://"));
 }
 
+TEST_CASE("OpenDAL filesystem creates directories in the memory backend", "[opendalfs]") {
+	OpenDALFileSystem fs;
+
+	REQUIRE_NOTHROW(fs.CreateDirectory("memory://directory/"));
+	REQUIRE_THROWS(fs.CreateDirectory("directory/"));
+	REQUIRE_THROWS(fs.CreateDirectory("unknown://directory/"));
+	REQUIRE_THROWS(fs.CreateDirectory("memory://"));
+}
+
 } // namespace duckdb
