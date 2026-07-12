@@ -78,6 +78,35 @@ vector<string> OpenDALFileSystem::ListDirectory(const string &path_p) const {
 	return result;
 }
 
+void OpenDALFileSystem::MoveFile(const string &source_p, const string &target_p) {
+	OpenDALPath source;
+	OpenDALPath target;
+	if (!OpenDALPath::TryParse(source_p, source)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", source_p);
+	}
+	if (!OpenDALPath::TryParse(target_p, target)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", target_p);
+	}
+	if (source.path.empty() || target.path.empty()) {
+		throw InvalidInputException("OpenDAL move paths must not be empty");
+	}
+
+	// Fast path: same scheme.
+	if (source.scheme == target.scheme) {
+		auto op = make_uniq<opendal::Operator>(source.scheme, config);
+		op->Rename(source.path, target.path);
+		return;
+	}
+
+	// Fallback to read and write.
+	// TODO(hjiang): parallel read and write.
+	auto source_op = make_uniq<opendal::Operator>(source.scheme, config);
+	auto target_op = make_uniq<opendal::Operator>(target.scheme, config);
+	auto data = source_op->Read(source.path);
+	target_op->Write(target.path, data);
+	source_op->Remove(source.path);
+}
+
 void OpenDALFileSystem::RemoveFile(const string &path_p) {
 	OpenDALPath path;
 	if (!OpenDALPath::TryParse(path_p, path)) {

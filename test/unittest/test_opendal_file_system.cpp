@@ -86,4 +86,13 @@ TEST_CASE("OpenDAL filesystem creates and lists directories in the memory backen
 	REQUIRE_THROWS(fs.ListDirectory("memory://"));
 }
 
+TEST_CASE("OpenDAL filesystem validates move paths", "[opendalfs]") {
+	OpenDALFileSystem fs;
+
+	REQUIRE_THROWS(fs.MoveFile("source.txt", "memory://target.txt"));
+	REQUIRE_THROWS(fs.MoveFile("memory://source.txt", "target.txt"));
+	REQUIRE_THROWS(fs.MoveFile("memory://", "memory://target.txt"));
+	REQUIRE_THROWS(fs.MoveFile("memory://source.txt", "memory://"));
+}
+
 } // namespace duckdb

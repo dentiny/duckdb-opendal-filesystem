@@ -28,6 +28,7 @@ public:
 	bool Exists(const string &path_p) const;
 	void CreateDirectory(const string &path_p);
 	vector<string> ListDirectory(const string &path_p) const;
+	void MoveFile(const string &source_p, const string &target_p);
 	void RemoveFile(const string &path_p);
 	bool CanHandleFile(const string &path_p) const;
 	// Accept filepath directly.
