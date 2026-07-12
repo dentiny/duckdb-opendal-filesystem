@@ -1,7 +1,4 @@
-#
-# This workflow calls the main distribution pipeline from DuckDB to build, test and (optionally) release the extension
-#
-name: Main Extension Distribution Pipeline
+name: MinIO Integration Test
 on:
   push:
   pull_request:
@@ -12,19 +9,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  duckdb-stable-build:
-    name: Build extension binaries
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
-    with:
-      duckdb_version: v1.5.4
-      ci_tools_version: v1.5-variegata
-      extension_name: waddle
+  minio-test:
+    name: MinIO S3 secret integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
-  code-quality-check:
-    name: Code Quality Check
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.5-variegata
-    with:
-      duckdb_version: v1.5.4
-      ci_tools_version: v1.5-variegata
-      extension_name: waddle
-      format_checks: 'format;tidy'
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11.1
+        with:
+          vcpkgGitCommitId: ce613c41372b23b1f51333815feb3edd87ef8a8b
+
+      - name: Build
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 12
+          VCPKG_TOOLCHAIN_PATH: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+        run: make reldebug
+
+      - name: Start MinIO
+        run: make minio-up
+
+      - name: Test MinIO S3 secrets
+        env:
+          OPENDALFS_MINIO_AVAILABLE: 1
+        run: ./build/reldebug/test/unittest test/sql/opendal_s3_minio.test
+
+      - name: Stop MinIO
+        if: always()
+        run: make minio-down
