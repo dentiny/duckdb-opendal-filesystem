@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/parallel/csv_parallel_httpfs.test
+# name: test/sql/integration/httpfs/copy/csv/parallel/csv_parallel_httpfs.test
 # description: This test issue #7336 and #7337
 # group: [parallel]
 

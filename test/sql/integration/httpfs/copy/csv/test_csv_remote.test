@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/test_csv_remote.test
+# name: test/sql/integration/httpfs/copy/csv/test_csv_remote.test
 # description: Test reading csv files over http
 # group: [csv]
 

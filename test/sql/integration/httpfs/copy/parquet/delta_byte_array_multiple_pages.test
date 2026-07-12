@@ -1,4 +1,4 @@
-# name: test/sql/copy/parquet/delta_byte_array_multiple_pages.test
+# name: test/sql/integration/httpfs/copy/parquet/delta_byte_array_multiple_pages.test
 # description: Test delta byte array parquet file with multiple pages
 # group: [parquet]
 

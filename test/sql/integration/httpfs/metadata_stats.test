@@ -1,6 +1,6 @@
-# name: test/sql/metadata_stats.test
+# name: test/sql/integration/httpfs/metadata_stats.test
 # description: Test getting metadata stats
-# group: [sql]
+# group: [httpfs]
 
 require parquet
 

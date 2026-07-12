@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/test_sniff_httpfs.test
+# name: test/sql/integration/httpfs/copy/csv/test_sniff_httpfs.test
 # description: Test sniff_csv functions over httpfs with auto-detection on compression
 # group: [csv]
 

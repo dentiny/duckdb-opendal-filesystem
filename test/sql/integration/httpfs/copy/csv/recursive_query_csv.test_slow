@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/recursive_query_csv.test_slow
+# name: test/sql/integration/httpfs/copy/csv/recursive_query_csv.test_slow
 # description: Test read CSV function in a recursive CTE
 # group: [csv]
 

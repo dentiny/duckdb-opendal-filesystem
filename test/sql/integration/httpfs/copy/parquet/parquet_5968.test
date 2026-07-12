@@ -1,4 +1,4 @@
-# name: test/sql/copy/parquet/parquet_5968.test
+# name: test/sql/integration/httpfs/copy/parquet/parquet_5968.test
 # description: Issue #5968: Segmentation fault on reading parquet file
 # group: [parquet]
 

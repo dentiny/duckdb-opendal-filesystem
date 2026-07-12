@@ -2,6 +2,7 @@
 
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/common/mutex.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/typedefs.hpp"
 #include "duckdb/common/unordered_map.hpp"
@@ -18,6 +19,7 @@ namespace duckdb {
 
 // Forward declaration.
 class OpenDALFileHandle;
+struct OpenDALPath;
 
 class OpenDALFileSystem : public FileSystem {
 public:
@@ -68,6 +70,8 @@ public:
 	bool IsManuallySet() override;
 
 private:
+	unique_ptr<opendal::Operator> CreateOperator(const string &uri_p, OpenDALPath &parsed_path_p,
+	                                             optional_ptr<FileOpener> opener_p) const;
 	unordered_map<string, string> config;
 };
 
@@ -103,10 +107,12 @@ private:
 private:
 	unique_ptr<opendal::Operator> op;
 	unique_ptr<opendal::Reader> reader;
+	mutex reader_lock;
 	string path;
 	OpenDALOpenOptions options;
 	string data;
 	idx_t position = 0;
+	idx_t reader_position = 0;
 	bool dirty = false;
 	bool closed = false;
 };

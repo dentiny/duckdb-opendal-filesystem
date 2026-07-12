@@ -1,0 +1,33 @@
+# name: test/sql/opendal_s3_minio.test
+# description: Read and write MinIO through an opendal_s3 secret
+# group: [sql]
+
+require duckdb_opendalfs
+
+require-env OPENDALFS_MINIO_AVAILABLE
+
+set ignore_error_messages
+
+statement ok
+SET allow_persistent_secrets=false;
+
+statement ok
+CREATE SECRET minio_secret (
+	TYPE opendal_s3,
+	SCOPE 's3://test',
+	ACCESS_KEY_ID 'minioadmin',
+	SECRET_ACCESS_KEY 'minioadmin',
+	REGION 'us-east-1',
+	ENDPOINT 'http://127.0.0.1:19000'
+);
+
+statement ok
+COPY (SELECT 42 AS value, 'opendal' AS name) TO 's3://test/secret-test.csv' (HEADER, DELIMITER ',');
+
+query II
+SELECT * FROM read_csv_auto('s3://test/secret-test.csv');
+----
+42	opendal
+
+statement ok
+DROP SECRET minio_secret;

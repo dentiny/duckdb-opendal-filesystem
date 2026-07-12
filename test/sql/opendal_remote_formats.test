@@ -1,0 +1,19 @@
+# name: test/sql/opendal_remote_formats.test
+# description: Read and parse remote CSV and Parquet files through OpenDAL
+# group: [sql]
+
+require duckdb_opendalfs
+
+require parquet
+
+query I
+SELECT COUNT(*)
+FROM read_csv_auto('https://raw.githubusercontent.com/dentiny/duck-read-cache-fs/refs/heads/main/test/data/stock-exchanges.csv');
+----
+251
+
+query I
+SELECT COUNT(*)
+FROM read_parquet('https://blobs.duckdb.org/data/taxi_2019_04.parquet');
+----
+7433139

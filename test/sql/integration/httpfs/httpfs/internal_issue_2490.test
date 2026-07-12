@@ -1,4 +1,4 @@
-# name: test/sql/httpfs/internal_issue_2490.test
+# name: test/sql/integration/httpfs/httpfs/internal_issue_2490.test
 # description: Internal issue 2490 - Wrong URL encoding leads to 404 for redirects with httplib v0.14.3
 # group: [httpfs]
 

@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/test_csv_httpfs_main.test
+# name: test/sql/integration/httpfs/copy/csv/test_csv_httpfs_main.test
 # description: This test triggers the http prefetch mechanism.
 # group: [csv]
 

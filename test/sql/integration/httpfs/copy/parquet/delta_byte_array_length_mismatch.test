@@ -1,4 +1,4 @@
-# name: test/sql/copy/parquet/delta_byte_array_length_mismatch.test
+# name: test/sql/integration/httpfs/copy/parquet/delta_byte_array_length_mismatch.test
 # description: Test reading a delta
 # group: [parquet]
 

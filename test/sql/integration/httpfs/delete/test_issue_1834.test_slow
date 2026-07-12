@@ -1,4 +1,4 @@
-# name: test/sql/delete/test_issue_1834.test_slow
+# name: test/sql/integration/httpfs/delete/test_issue_1834.test_slow
 # description: Deleting with DELETE USING causes a segmentation fault
 # group: [delete]
 

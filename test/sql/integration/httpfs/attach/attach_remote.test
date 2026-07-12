@@ -1,4 +1,4 @@
-# name: test/sql/attach/attach_remote.test
+# name: test/sql/integration/httpfs/attach/attach_remote.test
 # description: Test attaching of remote database
 # group: [attach]
 

@@ -1,5 +1,6 @@
 #include "catch/catch.hpp"
 #include "opendal_file_system.hpp"
+#include "opendal_path.hpp"
 
 #include <opendal.hpp>
 
@@ -24,6 +25,69 @@ TEST_CASE("OpenDAL filesystem handles registered prefixes only", "[opendalfs]") 
 	REQUIRE(!fs.CanHandleFile("/tmp/hello.txt"));
 	REQUIRE(!fs.CanHandleFile("file:///tmp/hello.txt"));
 	REQUIRE(!fs.CanHandleFile("unknown://hello.txt"));
+}
+
+TEST_CASE("OpenDAL paths configure every registered storage backend", "[opendalfs]") {
+	struct TestCase {
+		const char *uri;
+		const char *scheme;
+		const char *path;
+		const char *config_key;
+		const char *config_value;
+	};
+	const TestCase cases[] = {
+	    {"memory://file", "memory", "file", "", ""},
+	    {"s3://bucket/file", "s3", "file", "bucket", "bucket"},
+	    {"s3a://bucket/file", "s3", "file", "bucket", "bucket"},
+	    {"s3n://bucket/file", "s3", "file", "bucket", "bucket"},
+	    {"gs://bucket/file", "gcs", "file", "bucket", "bucket"},
+	    {"gcs://bucket/file", "gcs", "file", "bucket", "bucket"},
+	    {"az://container/file", "azblob", "file", "container", "container"},
+	    {"azblob://container/file", "azblob", "file", "container", "container"},
+	    {"abfs://account.dfs.core.windows.net/filesystem/file", "azdls", "file", "filesystem", "filesystem"},
+	    {"abfss://account.dfs.core.windows.net/filesystem/file", "azdls", "file", "filesystem", "filesystem"},
+	    {"azdls://account.dfs.core.windows.net/filesystem/file", "azdls", "file", "filesystem", "filesystem"},
+	    {"azfile://account.file.core.windows.net/share/file", "azfile", "file", "share_name", "share"},
+	    {"http://example.com/file", "http", "file", "endpoint", "http://example.com"},
+	    {"https://example.com/file", "http", "file", "endpoint", "https://example.com"},
+	    {"aliyun-drive://resource/file", "aliyun-drive", "file", "drive_type", "resource"},
+	    {"b2://bucket/file", "b2", "file", "bucket", "bucket"},
+	    {"cos://bucket/file", "cos", "file", "bucket", "bucket"},
+	    {"dbfs://workspace.example.com/file", "dbfs", "file", "endpoint", "https://workspace.example.com"},
+	    {"dropbox://remote/file", "dropbox", "file", "", ""},
+	    {"ftp://ftp.example.com/file", "ftp", "file", "endpoint", "ftp://ftp.example.com"},
+	    {"gdrive://service/file", "gdrive", "file", "", ""},
+	    {"github://apache/opendal/file", "github", "file", "repo", "opendal"},
+	    {"hf://datasets/apache/opendal/file", "hf", "file", "repo_id", "apache/opendal"},
+	    {"huggingface://models/apache/opendal/file", "huggingface", "file", "repo_id", "apache/opendal"},
+	    {"ipfs://ipfs.io/file", "ipfs", "file", "endpoint", "http://ipfs.io"},
+	    {"koofr://api.koofr.net/user/file", "koofr", "file", "email", "user"},
+	    {"lakefs://api.example.com/repository/main/file", "lakefs", "file", "repository", "repository"},
+	    {"obs://bucket/file", "obs", "file", "bucket", "bucket"},
+	    {"onedrive://drive/root/file", "onedrive", "file", "", ""},
+	    {"oss://bucket/file", "oss", "file", "bucket", "bucket"},
+	    {"pcloud://api.pcloud.com/file", "pcloud", "file", "endpoint", "https://api.pcloud.com"},
+	    {"seafile://files.example.com/repository/file", "seafile", "file", "repo_name", "repository"},
+	    {"sftp://sftp.example.com/file", "sftp", "file", "endpoint", "sftp.example.com"},
+	    {"swift://swift.example.com/container/file", "swift", "file", "container", "container"},
+	    {"tos://bucket/file", "tos", "file", "bucket", "bucket"},
+	    {"upyun://bucket/file", "upyun", "file", "bucket", "bucket"},
+	    {"vercel-artifacts://cache/file", "vercel-artifacts", "cache/file", "", ""},
+	    {"vercel-blob://project/file", "vercel-blob", "file", "", ""},
+	    {"webdav://dav.example.com/file", "webdav", "file", "endpoint", "https://dav.example.com"},
+	    {"yandex-disk://disk/file", "yandex-disk", "file", "", ""},
+	};
+
+	for (const auto &test : cases) {
+		OpenDALPath path;
+		INFO(test.uri);
+		REQUIRE(OpenDALPath::TryParse(test.uri, path));
+		REQUIRE(path.scheme == test.scheme);
+		REQUIRE(path.path == test.path);
+		if (*test.config_key) {
+			REQUIRE(path.uri_config.at(test.config_key) == test.config_value);
+		}
+	}
 }
 
 TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory backend", "[opendalfs]") {

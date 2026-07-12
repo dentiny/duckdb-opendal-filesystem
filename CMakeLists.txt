@@ -78,9 +78,30 @@ set(OPENDAL_FEATURES
     CACHE STRING "OpenDAL storage backend features" FORCE)
 add_subdirectory(opendal/bindings/cpp opendal-cpp)
 
+# OpenDAL installs its default HTTP transporter from a Rust static constructor.
+# Retain the Rust archive published by the binding so that constructor is not
+# discarded by the final executable or extension link.
+if(APPLE OR (UNIX AND NOT WIN32))
+  get_target_property(OPENDAL_CPP_INTERFACE_LIBS opendal_cpp
+                      INTERFACE_LINK_LIBRARIES)
+  list(GET OPENDAL_CPP_INTERFACE_LIBS 0 OPENDAL_RUST_LIB)
+  list(REMOVE_ITEM OPENDAL_CPP_INTERFACE_LIBS "${OPENDAL_RUST_LIB}")
+  set_target_properties(opendal_cpp PROPERTIES INTERFACE_LINK_LIBRARIES
+                                               "${OPENDAL_CPP_INTERFACE_LIBS}")
+  if(APPLE)
+    target_link_libraries(opendal_cpp
+                          INTERFACE "-Wl,-force_load,${OPENDAL_RUST_LIB}")
+  else()
+    target_link_libraries(
+      opendal_cpp INTERFACE "-Wl,--whole-archive" "${OPENDAL_RUST_LIB}"
+                            "-Wl,--no-whole-archive")
+  endif()
+endif()
+
 add_library(
   duckdb_opendalfs_core STATIC
-  src/opendal_file_system.cpp src/opendal_open_options.cpp src/opendal_path.cpp)
+  src/opendal_file_system.cpp src/opendal_open_options.cpp src/opendal_path.cpp
+  src/opendal_secret.cpp src/opendal_uri.cpp)
 target_compile_features(duckdb_opendalfs_core PUBLIC cxx_std_17)
 target_include_directories(duckdb_opendalfs_core PUBLIC src/include)
 target_link_libraries(duckdb_opendalfs_core PUBLIC opendal_cpp)
