@@ -97,4 +97,13 @@ TEST_CASE("OpenDAL filesystem validates move paths", "[opendalfs]") {
 	REQUIRE_THROWS(fs.MoveFile("memory://source.txt", "memory://"));
 }
 
+TEST_CASE("OpenDAL filesystem validates copy paths", "[opendalfs]") {
+	OpenDALFileSystem fs;
+
+	REQUIRE_THROWS(fs.CopyFile("source.txt", "memory://target.txt"));
+	REQUIRE_THROWS(fs.CopyFile("memory://source.txt", "target.txt"));
+	REQUIRE_THROWS(fs.CopyFile("memory://", "memory://target.txt"));
+	REQUIRE_THROWS(fs.CopyFile("memory://source.txt", "memory://"));
+}
+
 } // namespace duckdb
