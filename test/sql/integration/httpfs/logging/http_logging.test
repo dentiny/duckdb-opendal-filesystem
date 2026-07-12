@@ -1,4 +1,4 @@
-# name: test/sql/logging/http_logging.test
+# name: test/sql/integration/httpfs/logging/http_logging.test
 # group: [logging]
 
 require parquet

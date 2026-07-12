@@ -1,4 +1,4 @@
-# name: test/sql/copy/parquet/parquet_2102.test_slow
+# name: test/sql/integration/httpfs/copy/parquet/parquet_2102.test_slow
 # description: Missing Column Data After Adding Left Join To Query in DuckDB Version 0.2.8
 # group: [parquet]
 

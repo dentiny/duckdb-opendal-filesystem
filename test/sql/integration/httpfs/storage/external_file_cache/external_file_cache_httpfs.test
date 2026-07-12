@@ -1,4 +1,4 @@
-# name: test/sql/storage/external_file_cache/external_file_cache_httpfs.test
+# name: test/sql/integration/httpfs/storage/external_file_cache/external_file_cache_httpfs.test
 # description: Test the external file cache for HTTPFS reads
 # group: [external_file_cache]
 

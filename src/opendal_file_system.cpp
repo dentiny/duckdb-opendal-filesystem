@@ -1,8 +1,10 @@
 #include "opendal_file_system.hpp"
 
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/limits.hpp"
 #include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/main/secret/secret_manager.hpp"
 #include "opendal_path.hpp"
 
 #include <opendal.hpp>
@@ -28,6 +30,33 @@ unique_ptr<opendal::Operator> CreateOperator(const OpenDALPath &path_p, const un
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
 }
 
+unordered_map<string, string> OpenDALFileSystem::ResolveConfig(const OpenDALPath &path_p, const string &full_path_p,
+                                                               optional_ptr<FileOpener> opener_p) const {
+	auto result = config;
+	auto secret_manager = FileOpener::TryGetSecretManager(opener_p);
+	auto transaction = FileOpener::TryGetCatalogTransaction(opener_p);
+	if (!secret_manager || !transaction) {
+		return result;
+	}
+
+	auto service = path_p.scheme;
+	std::replace(service.begin(), service.end(), '-', '_');
+	const auto secret_type = service == "http" ? string("http") : string("opendal_") + service;
+	auto secret_match = secret_manager->LookupSecret(*transaction, full_path_p, secret_type);
+	if (!secret_match.HasMatch()) {
+		return result;
+	}
+	const auto &secret = dynamic_cast<const KeyValueSecret &>(*secret_match.secret_entry->secret);
+	for (const auto &entry : secret.secret_map) {
+		auto key = entry.first;
+		if (key == "bearer_token") {
+			key = "token";
+		}
+		result[key] = entry.second.ToString();
+	}
+	return result;
+}
+
 unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpenFlags flags_p,
                                                    optional_ptr<FileOpener> opener_p) {
 	OpenDALOpenOptions options(flags_p);
@@ -46,7 +75,7 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 		throw InvalidInputException("OpenDAL object path must not be empty");
 	}
 
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	const bool exists = op->Exists(path.path);
 	if (!exists && !options.create) {
 		if (flags_p.ReturnNullIfNotExists()) {
@@ -62,7 +91,7 @@ bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener
 	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
 		return false;
 	}
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	return op->Exists(path.path);
 }
 
@@ -163,7 +192,7 @@ void OpenDALFileSystem::CreateDirectory(const string &path_p, optional_ptr<FileO
 	if (path.path.empty()) {
 		throw InvalidInputException("OpenDAL directory path must not be empty");
 	}
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	op->CreateDir(path.path);
 }
 
@@ -176,7 +205,7 @@ bool OpenDALFileSystem::DirectoryExists(const string &path_p, optional_ptr<FileO
 	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
 		return false;
 	}
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	return op->Stat(path.path).IsDir();
 }
 
@@ -189,7 +218,7 @@ bool OpenDALFileSystem::ListFiles(const string &path_p, const std::function<void
 	if (path.path.empty()) {
 		throw InvalidInputException("OpenDAL directory path must not be empty");
 	}
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	auto entries = op->List(path.path);
 	for (const auto &entry : entries) {
 		callback_p(entry.path, !entry.path.empty() && entry.path.back() == '/');
@@ -212,15 +241,15 @@ void OpenDALFileSystem::MoveFile(const string &source_p, const string &target_p,
 
 	// Fast path: same scheme.
 	if (source.scheme == target.scheme) {
-		auto op = CreateOperator(source, config);
+		auto op = CreateOperator(source, ResolveConfig(source, source_p, opener_p));
 		op->Rename(source.path, target.path);
 		return;
 	}
 
 	// Fallback to read and write.
 	// TODO(hjiang): parallel read and write.
-	auto source_op = CreateOperator(source, config);
-	auto target_op = CreateOperator(target, config);
+	auto source_op = CreateOperator(source, ResolveConfig(source, source_p, opener_p));
+	auto target_op = CreateOperator(target, ResolveConfig(target, target_p, opener_p));
 	auto data = source_op->Read(source.path);
 	target_op->Write(target.path, data);
 	source_op->Remove(source.path);
@@ -234,7 +263,7 @@ void OpenDALFileSystem::RemoveDirectory(const string &path_p, optional_ptr<FileO
 	if (path.path.empty()) {
 		throw InvalidInputException("OpenDAL directory path must not be empty");
 	}
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	op->Remove(path.path);
 }
 
@@ -246,7 +275,7 @@ void OpenDALFileSystem::RemoveFile(const string &path_p, optional_ptr<FileOpener
 	if (path.path.empty()) {
 		throw InvalidInputException("OpenDAL object path must not be empty");
 	}
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	op->Remove(path.path);
 }
 
@@ -264,8 +293,9 @@ void OpenDALFileSystem::RemoveFiles(const vector<string> &paths_p, optional_ptr<
 		}
 		paths.emplace_back(std::move(path));
 	}
-	for (const auto &path : paths) {
-		auto op = CreateOperator(path, config);
+	for (idx_t index = 0; index < paths.size(); index++) {
+		const auto &path = paths[index];
+		auto op = CreateOperator(path, ResolveConfig(path, paths_p[index], opener_p));
 		op->Remove(path.path);
 	}
 }
@@ -275,7 +305,7 @@ bool OpenDALFileSystem::TryRemoveFile(const string &path_p, optional_ptr<FileOpe
 	if (!OpenDALPath::TryParse(path_p, path) || path.path.empty()) {
 		return false;
 	}
-	auto op = CreateOperator(path, config);
+	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
 	op->Remove(path.path);
 	return true;
 }

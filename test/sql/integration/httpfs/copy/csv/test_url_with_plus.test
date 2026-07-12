@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/test_url_with_plus.test
+# name: test/sql/integration/httpfs/copy/csv/test_url_with_plus.test
 # description: Tests url with plus
 # group: [csv]
 

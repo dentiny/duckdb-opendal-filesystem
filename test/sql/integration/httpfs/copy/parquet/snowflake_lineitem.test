@@ -1,4 +1,4 @@
-# name: test/sql/copy/parquet/snowflake_lineitem.test
+# name: test/sql/integration/httpfs/copy/parquet/snowflake_lineitem.test
 # description: Test parquet file exported from snowflake
 # group: [parquet]
 

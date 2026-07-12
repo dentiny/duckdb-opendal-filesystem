@@ -6,6 +6,7 @@
 #include "duckdb/common/opener_file_system.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "opendal_file_system.hpp"
+#include "opendal_secret.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 #include <opendal.hpp>
@@ -14,6 +15,8 @@ namespace duckdb {
 
 namespace {
 void LoadInternal(ExtensionLoader &loader) {
+	RegisterOpenDALSecrets(loader);
+
 	auto &instance = loader.GetDatabaseInstance();
 	auto &opener_filesystem = instance.GetFileSystem().Cast<OpenerFileSystem>();
 	auto &vfs = opener_filesystem.GetFileSystem();

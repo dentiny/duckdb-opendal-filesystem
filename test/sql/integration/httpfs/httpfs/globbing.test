@@ -1,4 +1,4 @@
-# name: test/sql/httpfs/globbing.test
+# name: test/sql/integration/httpfs/httpfs/globbing.test
 # description: Test remote globbing
 # group: [httpfs]
 

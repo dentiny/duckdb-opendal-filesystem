@@ -1,4 +1,4 @@
-# name: test/sql/storage/external_file_cache/external_file_cache_read_blob.test_slow
+# name: test/sql/integration/httpfs/storage/external_file_cache/external_file_cache_read_blob.test_slow
 # description: Test the external file cache for read_blob HTTPFS reads
 # group: [external_file_cache]
 

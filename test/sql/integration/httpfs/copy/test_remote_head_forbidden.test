@@ -1,4 +1,4 @@
-# name: test/sql/copy/test_remote_head_forbidden.test
+# name: test/sql/integration/httpfs/copy/test_remote_head_forbidden.test
 # description: Test Force download with server that doesn't want to give us the head
 # group: [copy]
 

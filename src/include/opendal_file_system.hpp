@@ -18,6 +18,7 @@ namespace duckdb {
 
 // Forward declaration.
 class OpenDALFileHandle;
+struct OpenDALPath;
 
 class OpenDALFileSystem : public FileSystem {
 public:
@@ -68,6 +69,8 @@ public:
 	bool IsManuallySet() override;
 
 private:
+	unordered_map<string, string> ResolveConfig(const OpenDALPath &path_p, const string &full_path_p,
+	                                            optional_ptr<FileOpener> opener_p) const;
 	unordered_map<string, string> config;
 };
 

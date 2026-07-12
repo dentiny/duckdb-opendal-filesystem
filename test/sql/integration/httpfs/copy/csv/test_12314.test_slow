@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/test_12314.test_slow
+# name: test/sql/integration/httpfs/copy/csv/test_12314.test_slow
 # description: Test CSV reading for issue 12314
 # group: [csv]
 

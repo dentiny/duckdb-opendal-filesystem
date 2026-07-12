@@ -1,4 +1,4 @@
-# name: test/sql/copy/csv/test_csv_remote.test_slow
+# name: test/sql/integration/httpfs/copy/csv/test_csv_remote.test_slow
 # description: Test reading csv files over http, slow queries
 # group: [csv]
 

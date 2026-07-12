@@ -1,4 +1,4 @@
-# name: test/sql/storage/invalid_unicode_scrambled.test_slow
+# name: test/sql/integration/httpfs/storage/invalid_unicode_scrambled.test_slow
 # description: Issue #1650 - "invalid unicode detected in segment statistics" when inserting structs with strings and NULL values
 # group: [storage]
 
