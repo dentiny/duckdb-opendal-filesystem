@@ -25,6 +25,7 @@ public:
 public:
 	unique_ptr<OpenDALFileHandle> Open(const string &path_p, OpenDALOpenOptions options_p);
 	bool Exists(const string &path_p) const;
+	void RemoveFile(const string &path_p);
 	bool CanHandleFile(const string &path_p) const;
 	// Accept filepath directly.
 	bool IsManuallySet() const;
