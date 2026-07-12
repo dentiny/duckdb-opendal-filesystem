@@ -80,6 +80,9 @@ TEST_CASE("OpenDAL filesystem creates and lists directories in the memory backen
 	REQUIRE_NOTHROW(fs.CreateDirectory("memory://directory/first/"));
 	REQUIRE_NOTHROW(fs.CreateDirectory("memory://directory/second/"));
 	REQUIRE(fs.ListDirectory("memory://directory/").empty());
+	REQUIRE(!fs.DirectoryExists("directory/"));
+	REQUIRE(!fs.DirectoryExists("unknown://directory/"));
+	REQUIRE(!fs.DirectoryExists("memory://"));
 	REQUIRE_NOTHROW(fs.RemoveDirectory("memory://directory/first/"));
 	REQUIRE_NOTHROW(fs.RemoveDirectory("memory://directory/second/"));
 	REQUIRE_NOTHROW(fs.RemoveDirectory("memory://directory/"));

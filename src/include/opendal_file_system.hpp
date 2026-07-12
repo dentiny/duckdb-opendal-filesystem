@@ -29,6 +29,7 @@ public:
 	idx_t GetFileSize(const string &path_p) const;
 	void CopyFile(const string &source_p, const string &target_p);
 	void CreateDirectory(const string &path_p);
+	bool DirectoryExists(const string &path_p) const;
 	vector<string> ListDirectory(const string &path_p) const;
 	void MoveFile(const string &source_p, const string &target_p);
 	void RemoveDirectory(const string &path_p);
