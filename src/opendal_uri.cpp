@@ -1,5 +1,7 @@
 #include "opendal_uri.hpp"
 
+#include "duckdb/common/string_util.hpp"
+
 namespace duckdb {
 namespace {
 
@@ -27,6 +29,12 @@ OpenDALUri OpenDALUri::Parse(const string &uri_p, idx_t prefix_size_p) {
 	const auto authority_size = slash == string::npos ? uri_p.size() - prefix_size_p : slash - prefix_size_p;
 	result.authority = uri_p.substr(prefix_size_p, authority_size);
 	result.root = slash == string::npos ? string() : uri_p.substr(slash + 1);
+	const auto query = result.root.find('?');
+	if (query != string::npos) {
+		result.query = result.root.substr(query + 1);
+		result.root.resize(query);
+	}
+	result.root = StringUtil::URLDecode(result.root);
 	result.trailing_slash = !uri_p.empty() && uri_p.back() == '/';
 	return result;
 }
@@ -36,6 +44,12 @@ void OpenDALUri::Apply(const string &scheme_p, const string &uri_prefix_p, unord
 	path_p = root;
 	if (scheme_p == "http") {
 		config_p["endpoint"] = uri_prefix_p + authority;
+		if ((authority == "github.com" || StringUtil::StartsWith(authority, "github.com:")) && query == "raw=true") {
+			const auto blob = path_p.find("/blob/");
+			if (blob != string::npos) {
+				path_p.replace(blob, 6, "/raw/");
+			}
+		}
 		return;
 	}
 	if (IsBucketService(scheme_p)) {

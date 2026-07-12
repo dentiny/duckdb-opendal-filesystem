@@ -9,6 +9,7 @@ namespace duckdb {
 struct OpenDALUri {
 	string authority;
 	string root;
+	string query;
 	bool trailing_slash = false;
 
 	static OpenDALUri Parse(const string &uri_p, idx_t prefix_size_p);

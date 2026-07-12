@@ -392,6 +392,7 @@ void OpenDALFileHandle::EnsureWritable() const {
 }
 
 idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
+	lock_guard<mutex> guard(reader_lock);
 	if (size_p == 0) {
 		return 0;
 	}
@@ -418,12 +419,18 @@ idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
 		reader->Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
 		reader_position = offset_p;
 	}
-	const auto read_size = reader->Read(buffer_p, static_cast<std::streamsize>(size_p));
-	if (read_size <= 0) {
-		return 0;
+	idx_t total_read = 0;
+	while (total_read < size_p) {
+		const auto read_size =
+		    reader->Read(static_cast<char *>(buffer_p) + total_read, static_cast<std::streamsize>(size_p - total_read));
+		if (read_size <= 0) {
+			break;
+		}
+		const auto bytes_read = static_cast<idx_t>(read_size);
+		total_read += bytes_read;
+		reader_position += bytes_read;
 	}
-	reader_position += static_cast<idx_t>(read_size);
-	return static_cast<idx_t>(read_size);
+	return total_read;
 }
 
 idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p) {
