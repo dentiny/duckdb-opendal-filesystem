@@ -28,6 +28,14 @@ unique_ptr<opendal::Operator> CreateOperator(const OpenDALPath &path_p, const un
 	return make_uniq<opendal::Operator>(path_p.scheme, config);
 }
 
+bool ObjectExists(opendal::Operator &op_p, const string &path_p) {
+	const auto separator = path_p.rfind('/');
+	const auto parent = separator == string::npos ? string() : path_p.substr(0, separator + 1);
+	const auto entries = op_p.List(parent);
+	return std::any_of(entries.begin(), entries.end(),
+	                   [&](const opendal::Entry &entry_p) { return entry_p.path == path_p; });
+}
+
 } // namespace
 
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
@@ -79,8 +87,7 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 	}
 
 	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	const bool exists = op->Exists(path.path);
-	if (!exists && !options.create) {
+	if (!options.create && !ObjectExists(*op, path.path)) {
 		if (flags_p.ReturnNullIfNotExists()) {
 			return nullptr;
 		}
@@ -95,7 +102,7 @@ bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener
 		return false;
 	}
 	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	return op->Exists(path.path);
+	return ObjectExists(*op, path.path);
 }
 
 int64_t OpenDALFileSystem::GetFileSize(FileHandle &handle_p) {
@@ -136,6 +143,12 @@ bool OpenDALFileSystem::Trim(FileHandle &handle_p, idx_t offset_p, idx_t length_
 
 FileMetadata OpenDALFileSystem::Stats(FileHandle &handle_p) {
 	auto &handle = handle_p.Cast<OpenDALFileHandle>();
+	if (handle.options.write) {
+		FileMetadata result;
+		result.file_size = static_cast<int64_t>(handle.Size());
+		result.file_type = FileType::FILE_TYPE_REGULAR;
+		return result;
+	}
 	const auto metadata = handle.op->Stat(handle.path);
 	FileMetadata result;
 	result.file_size = static_cast<int64_t>(metadata.ContentLength());
@@ -156,6 +169,9 @@ timestamp_t OpenDALFileSystem::GetLastModifiedTime(FileHandle &handle_p) {
 
 string OpenDALFileSystem::GetVersionTag(FileHandle &handle_p) {
 	auto &handle = handle_p.Cast<OpenDALFileHandle>();
+	if (handle.options.write) {
+		return string();
+	}
 	const auto metadata = handle.op->Stat(handle.path);
 	return metadata.Etag().value_or(string());
 }
@@ -209,7 +225,11 @@ bool OpenDALFileSystem::DirectoryExists(const string &path_p, optional_ptr<FileO
 		return false;
 	}
 	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	return op->Stat(path.path).IsDir();
+	auto directory_path = std::move(path.path);
+	if (directory_path.back() != '/') {
+		directory_path += '/';
+	}
+	return ObjectExists(*op, directory_path);
 }
 
 bool OpenDALFileSystem::ListFiles(const string &path_p, const std::function<void(const string &, bool)> &callback_p,
@@ -522,6 +542,10 @@ void OpenDALFileHandle::Flush() {
 void OpenDALFileHandle::Close() {
 	if (closed) {
 		return;
+	}
+	if (options.write && dirty) {
+		op->Write(path, data);
+		dirty = false;
 	}
 	reader.reset();
 	closed = true;

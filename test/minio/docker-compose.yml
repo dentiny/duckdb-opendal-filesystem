@@ -1,9 +1,10 @@
 services:
   minio:
     image: quay.io/minio/minio:RELEASE.2024-09-22T00-33-43Z
-    command: server /data
+    command: server /data --console-address ":9001"
     ports:
       - "19000:9000"
+      - "19001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
