@@ -19,11 +19,8 @@ namespace {
 
 unique_ptr<opendal::Operator> CreateOperator(const OpenDALPath &path_p, const unordered_map<string, string> &config_p) {
 	auto config = config_p;
-	if (!path_p.endpoint.empty()) {
-		config["endpoint"] = path_p.endpoint;
-	}
-	if (!path_p.bucket.empty()) {
-		config["bucket"] = path_p.bucket;
+	for (const auto &entry : path_p.uri_config) {
+		config[entry.first] = entry.second;
 	}
 	return make_uniq<opendal::Operator>(path_p.scheme, config);
 }
@@ -42,10 +39,10 @@ unordered_map<string, string> OpenDALFileSystem::ResolveConfig(const OpenDALPath
 		return result;
 	}
 
-	auto service = path_p.scheme;
-	std::replace(service.begin(), service.end(), '-', '_');
-	const auto secret_type = service == "http" ? string("http") : string("opendal_") + service;
-	auto secret_match = secret_manager->LookupSecret(*transaction, full_path_p, secret_type);
+	if (path_p.secret_type.empty()) {
+		return result;
+	}
+	auto secret_match = secret_manager->LookupSecret(*transaction, full_path_p, path_p.secret_type);
 	if (!secret_match.HasMatch()) {
 		return result;
 	}

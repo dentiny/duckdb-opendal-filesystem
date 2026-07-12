@@ -109,7 +109,7 @@ endif()
 add_library(
   duckdb_opendalfs_core STATIC
   src/opendal_file_system.cpp src/opendal_open_options.cpp src/opendal_path.cpp
-  src/opendal_secret.cpp)
+  src/opendal_secret.cpp src/opendal_uri.cpp)
 target_compile_features(duckdb_opendalfs_core PUBLIC cxx_std_17)
 target_include_directories(duckdb_opendalfs_core PUBLIC src/include)
 target_link_libraries(duckdb_opendalfs_core PUBLIC opendal_cpp)
