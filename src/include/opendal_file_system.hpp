@@ -27,6 +27,7 @@ public:
 	unique_ptr<OpenDALFileHandle> Open(const string &path_p, OpenDALOpenOptions options_p);
 	bool Exists(const string &path_p) const;
 	idx_t GetFileSize(const string &path_p) const;
+	void FileSync(OpenDALFileHandle &handle_p);
 	void CopyFile(const string &source_p, const string &target_p);
 	void CreateDirectory(const string &path_p);
 	bool DirectoryExists(const string &path_p) const;
