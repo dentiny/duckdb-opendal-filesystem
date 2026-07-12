@@ -38,6 +38,8 @@ public:
 	void RemoveFiles(const vector<string> &paths_p);
 	bool TryRemoveFile(const string &path_p);
 	bool CanHandleFile(const string &path_p) const;
+	bool CanSeek() const;
+	bool IsLocalFileSystem() const;
 	// Accept filepath directly.
 	bool IsManuallySet() const;
 
