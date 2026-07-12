@@ -1,12 +1,13 @@
 #include "opendal_path.hpp"
 
-#include "duckdb/common/string_util.hpp"
+#include <string_view>
 
 namespace duckdb {
+namespace {
 
 struct OpenDALPrefix {
-	const char *prefix;
-	const char *scheme;
+	std::string_view prefix;
+	std::string_view scheme;
 };
 
 static constexpr OpenDALPrefix OPENDAL_PREFIXES[] = {
@@ -52,12 +53,13 @@ static constexpr OpenDALPrefix OPENDAL_PREFIXES[] = {
     {"yandex-disk://", "yandex-disk"},
 };
 
+} // namespace
+
 bool OpenDALPath::TryParse(const string &path_p, OpenDALPath &result_p) {
 	for (const auto &entry : OPENDAL_PREFIXES) {
-		const string prefix(entry.prefix);
-		if (StringUtil::StartsWith(path_p, prefix)) {
-			result_p.scheme = entry.scheme;
-			result_p.path = path_p.substr(prefix.size());
+		if (path_p.compare(0, entry.prefix.size(), entry.prefix.data(), entry.prefix.size()) == 0) {
+			result_p.scheme.assign(entry.scheme.data(), entry.scheme.size());
+			result_p.path = path_p.substr(entry.prefix.size());
 			return true;
 		}
 	}
