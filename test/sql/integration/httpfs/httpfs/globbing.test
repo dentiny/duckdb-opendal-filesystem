@@ -1,0 +1,12 @@
+# name: test/sql/httpfs/globbing.test
+# description: Test remote globbing
+# group: [httpfs]
+
+require parquet
+
+require duckdb_opendalfs
+
+statement error
+select parse_path(filename), size, part, date from read_parquet('https://raw.githubusercontent.com/duckdb/duckdb/main/data/parquet-testing/hive-partitioning/simple/*/*/test.parquet') order by filename;
+----
+Invalid Input Error: Globs (`*`) for generic OpenDAL files are not supported

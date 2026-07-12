@@ -62,6 +62,7 @@ public:
 	string ExpandPath(const string &path_p) override;
 	string PathSeparator(const string &path_p) override;
 	bool IsPathAbsolute(const string &path_p) override;
+	vector<OpenFileInfo> Glob(const string &path_p, FileOpener *opener_p = nullptr) override;
 	bool OnDiskFile(FileHandle &handle_p) override;
 	// Accept filepath directly.
 	bool IsManuallySet() override;
