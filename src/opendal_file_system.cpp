@@ -28,14 +28,6 @@ unique_ptr<opendal::Operator> CreateOperator(const OpenDALPath &path_p, const un
 	return make_uniq<opendal::Operator>(path_p.scheme, config);
 }
 
-bool ObjectExists(opendal::Operator &op_p, const string &path_p) {
-	const auto separator = path_p.rfind('/');
-	const auto parent = separator == string::npos ? string() : path_p.substr(0, separator + 1);
-	const auto entries = op_p.List(parent);
-	return std::any_of(entries.begin(), entries.end(),
-	                   [&](const opendal::Entry &entry_p) { return entry_p.path == path_p; });
-}
-
 } // namespace
 
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
@@ -87,7 +79,8 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 	}
 
 	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	if (!options.create && !ObjectExists(*op, path.path)) {
+	const bool exists = op->Exists(path.path);
+	if (!exists && !options.create) {
 		if (flags_p.ReturnNullIfNotExists()) {
 			return nullptr;
 		}
@@ -102,7 +95,7 @@ bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener
 		return false;
 	}
 	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	return ObjectExists(*op, path.path);
+	return op->Exists(path.path);
 }
 
 int64_t OpenDALFileSystem::GetFileSize(FileHandle &handle_p) {
@@ -225,11 +218,7 @@ bool OpenDALFileSystem::DirectoryExists(const string &path_p, optional_ptr<FileO
 		return false;
 	}
 	auto op = CreateOperator(path, ResolveConfig(path, path_p, opener_p));
-	auto directory_path = std::move(path.path);
-	if (directory_path.back() != '/') {
-		directory_path += '/';
-	}
-	return ObjectExists(*op, directory_path);
+	return op->Stat(path.path).IsDir();
 }
 
 bool OpenDALFileSystem::ListFiles(const string &path_p, const std::function<void(const string &, bool)> &callback_p,
