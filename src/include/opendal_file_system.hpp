@@ -79,40 +79,58 @@ class OpenDALFileHandle : public FileHandle {
 
 public:
 	OpenDALFileHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p, string path_p,
-	                  FileOpenFlags flags_p, OpenDALOpenOptions options_p);
+	                  FileOpenFlags flags_p);
 	~OpenDALFileHandle() noexcept;
 	OpenDALFileHandle(const OpenDALFileHandle &) = delete;
 	OpenDALFileHandle &operator=(const OpenDALFileHandle &) = delete;
 
 public:
+	virtual idx_t Size() const;
+	virtual void Flush();
+	void Close() override;
+
+protected:
+	void EnsureOpen() const;
+
+protected:
+	unique_ptr<opendal::Operator> op;
+	string path;
+	bool closed = false;
+};
+
+class OpenDALReadHandle : public OpenDALFileHandle {
+public:
+	OpenDALReadHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p, string path_p,
+	                  FileOpenFlags flags_p);
+
 	idx_t Read(void *buffer_p, idx_t size_p);
 	idx_t Read(void *buffer_p, idx_t size_p, idx_t offset_p);
-	idx_t Write(const void *buffer_p, idx_t size_p);
-	idx_t Write(const void *buffer_p, idx_t size_p, idx_t offset_p);
 	void Seek(idx_t offset_p);
 	idx_t Tell() const;
-	idx_t Size() const;
-	void Truncate(idx_t size_p);
-	void Flush();
 	void Close() override;
 
 private:
-	void EnsureOpen() const;
-	void EnsureReadable() const;
-	void EnsureWritable() const;
 	idx_t ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p);
+
+private:
+	unique_ptr<opendal::Reader> reader;
+	idx_t position = 0;
+};
+
+class OpenDALWriteHandle : public OpenDALFileHandle {
+public:
+	OpenDALWriteHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p, string path_p,
+	                   FileOpenFlags flags_p);
+
+	idx_t Write(const void *buffer_p, idx_t size_p);
+	idx_t Write(const void *buffer_p, idx_t size_p, idx_t offset_p);
+	idx_t Tell() const;
+
+private:
 	idx_t WriteAt(const void *buffer_p, idx_t size_p, idx_t offset_p);
 
 private:
-	unique_ptr<opendal::Operator> op;
-	unique_ptr<opendal::Reader> reader;
-	string path;
-	OpenDALOpenOptions options;
-	string data;
 	idx_t position = 0;
-	idx_t reader_position = 0;
-	bool dirty = false;
-	bool closed = false;
 };
 
 } // namespace duckdb
