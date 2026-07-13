@@ -15,6 +15,23 @@
 #include <utility>
 
 namespace duckdb {
+namespace {
+
+idx_t ReadFromOpenDAL(opendal::Reader &reader_p, void *buffer_p, idx_t size_p) {
+	idx_t total_read = 0;
+	while (total_read < size_p) {
+		const auto read_size = reader_p.Read(static_cast<char *>(buffer_p) + total_read,
+		                                     static_cast<std::streamsize>(size_p - total_read));
+		if (read_size <= 0) {
+			break;
+		}
+		total_read += static_cast<idx_t>(read_size);
+	}
+	return total_read;
+}
+
+} // namespace
+
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
 }
 
@@ -392,21 +409,11 @@ void OpenDALFileHandle::EnsureWritable() const {
 }
 
 idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
-	lock_guard<mutex> guard(reader_lock);
 	if (size_p == 0) {
 		return 0;
 	}
 	if (!buffer_p) {
 		throw InvalidInputException("read buffer must not be null");
-	}
-
-	if (options.write) {
-		if (offset_p >= data.size()) {
-			return 0;
-		}
-		const auto read_size = std::min<idx_t>(size_p, data.size() - offset_p);
-		std::memcpy(buffer_p, data.data() + offset_p, read_size);
-		return read_size;
 	}
 
 	if (offset_p > static_cast<idx_t>(NumericLimits<std::streamoff>::Maximum())) {
@@ -415,34 +422,40 @@ idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
 	if (size_p > static_cast<idx_t>(NumericLimits<std::streamsize>::Maximum())) {
 		throw IOException("Read size exceeds OpenDAL reader range");
 	}
-	if (offset_p != reader_position) {
-		reader->Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
-		reader_position = offset_p;
+	auto positional_reader = op->GetReader(path);
+	if (offset_p != 0) {
+		positional_reader.Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
 	}
-	idx_t total_read = 0;
-	while (total_read < size_p) {
-		const auto read_size =
-		    reader->Read(static_cast<char *>(buffer_p) + total_read, static_cast<std::streamsize>(size_p - total_read));
-		if (read_size <= 0) {
-			break;
-		}
-		const auto bytes_read = static_cast<idx_t>(read_size);
-		total_read += bytes_read;
-		reader_position += bytes_read;
-	}
-	return total_read;
+	return ReadFromOpenDAL(positional_reader, buffer_p, size_p);
 }
 
 idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p) {
 	EnsureReadable();
-	return Read(buffer_p, size_p, position);
+	if (size_p == 0) {
+		return 0;
+	}
+	if (!buffer_p) {
+		throw InvalidInputException("read buffer must not be null");
+	}
+	if (position > static_cast<idx_t>(NumericLimits<std::streamoff>::Maximum())) {
+		throw IOException("Read offset exceeds OpenDAL reader range");
+	}
+	if (size_p > static_cast<idx_t>(NumericLimits<std::streamsize>::Maximum())) {
+		throw IOException("Read size exceeds OpenDAL reader range");
+	}
+	if (position != reader_position) {
+		reader->Seek(static_cast<std::streamoff>(position), std::ios_base::beg);
+		reader_position = position;
+	}
+	const auto read_size = ReadFromOpenDAL(*reader, buffer_p, size_p);
+	position += read_size;
+	reader_position += read_size;
+	return read_size;
 }
 
 idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p, idx_t offset_p) {
 	EnsureReadable();
-	const auto read_size = ReadAt(buffer_p, size_p, offset_p);
-	position = offset_p + read_size;
-	return read_size;
+	return ReadAt(buffer_p, size_p, offset_p);
 }
 
 idx_t OpenDALFileHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offset_p) {
