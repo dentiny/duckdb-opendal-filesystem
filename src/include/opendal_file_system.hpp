@@ -2,7 +2,6 @@
 
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/helper.hpp"
-#include "duckdb/common/mutex.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/typedefs.hpp"
 #include "duckdb/common/unordered_map.hpp"
@@ -107,7 +106,6 @@ private:
 private:
 	unique_ptr<opendal::Operator> op;
 	unique_ptr<opendal::Reader> reader;
-	mutex reader_lock;
 	string path;
 	OpenDALOpenOptions options;
 	string data;

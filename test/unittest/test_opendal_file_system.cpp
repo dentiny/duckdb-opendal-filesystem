@@ -5,6 +5,7 @@
 #include <opendal.hpp>
 
 #include <cstring>
+#include <thread>
 
 namespace duckdb {
 
@@ -132,6 +133,34 @@ TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory 
 	REQUIRE(reader.Read(buffer, 5) == 5);
 	REQUIRE(string(buffer, 5) == "hello");
 	reader.Close();
+}
+
+TEST_CASE("OpenDAL filesystem supports concurrent positional reads", "[opendalfs]") {
+	OpenDALFileSystem fs;
+	const string contents = "abcdefghijklmnopqrstuvwxyz";
+	auto op = make_uniq<opendal::Operator>("memory");
+	op->Write("parallel.txt", contents);
+	OpenDALFileHandle reader(fs, std::move(op), "memory://parallel.txt", "parallel.txt",
+	                         FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS,
+	                         OpenDALOpenOptions::ReadOnly());
+
+	vector<string> results(8, string(3, '\0'));
+	vector<idx_t> read_sizes(8);
+	vector<std::thread> workers;
+	for (idx_t index = 0; index < results.size(); index++) {
+		workers.emplace_back([&reader, &results, &read_sizes, index]() {
+			read_sizes[index] = reader.Read(results[index].data(), results[index].size(), index * 3);
+		});
+	}
+	for (auto &worker : workers) {
+		worker.join();
+	}
+
+	for (idx_t index = 0; index < results.size(); index++) {
+		REQUIRE(read_sizes[index] == results[index].size());
+		REQUIRE(results[index] == contents.substr(index * 3, 3));
+	}
+	REQUIRE(reader.Tell() == 0);
 }
 
 TEST_CASE("OpenDAL filesystem rejects invalid paths and closed handles", "[opendalfs]") {
