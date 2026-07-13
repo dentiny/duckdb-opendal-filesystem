@@ -96,25 +96,19 @@ TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory 
 	auto writer =
 	    fs.OpenFile("memory://hello.txt", FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW);
 	REQUIRE(!fs.OnDiskFile(*writer));
-	string hello = "hello";
-	REQUIRE(writer->Write(hello.data(), hello.size()) == hello.size());
-	string suffix = " world";
-	REQUIRE(writer->Write(suffix.data(), suffix.size()) == suffix.size());
+	string contents = "hello world";
+	REQUIRE(writer->Write(contents.data(), contents.size()) == contents.size());
 	REQUIRE(writer->SeekPosition() == 11);
 	REQUIRE(writer->GetFileSize() == 11);
-	fs.Truncate(*writer, 5);
-	REQUIRE(writer->SeekPosition() == 5);
-	REQUIRE(writer->GetFileSize() == 5);
-	REQUIRE(writer->Write(suffix.data(), suffix.size()) == suffix.size());
-	REQUIRE(writer->GetFileSize() == 11);
+	REQUIRE_THROWS(writer->Write(contents.data(), contents.size()));
+	REQUIRE_THROWS(fs.Truncate(*writer, 5));
 	fs.FileSync(*writer);
 	writer->Close();
 	writer->Close();
 
 	auto op = make_uniq<opendal::Operator>("memory");
 	op->Write("hello.txt", "hello world");
-	OpenDALFileHandle reader(fs, std::move(op), "memory://hello.txt", "hello.txt", FileFlags::FILE_FLAGS_READ,
-	                         OpenDALOpenOptions::ReadOnly());
+	OpenDALReadHandle reader(fs, std::move(op), "memory://hello.txt", "hello.txt", FileFlags::FILE_FLAGS_READ);
 	REQUIRE(reader.Size() == 11);
 
 	char buffer[16] = {};
@@ -140,9 +134,8 @@ TEST_CASE("OpenDAL filesystem supports concurrent positional reads", "[opendalfs
 	const string contents = "abcdefghijklmnopqrstuvwxyz";
 	auto op = make_uniq<opendal::Operator>("memory");
 	op->Write("parallel.txt", contents);
-	OpenDALFileHandle reader(fs, std::move(op), "memory://parallel.txt", "parallel.txt",
-	                         FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS,
-	                         OpenDALOpenOptions::ReadOnly());
+	OpenDALReadHandle reader(fs, std::move(op), "memory://parallel.txt", "parallel.txt",
+	                         FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS);
 
 	vector<string> results(8, string(3, '\0'));
 	vector<idx_t> read_sizes(8);

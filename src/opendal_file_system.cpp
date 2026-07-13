@@ -11,7 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstring>
+#include <string_view>
 #include <utility>
 
 namespace duckdb {
@@ -92,7 +92,10 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 		}
 		throw IOException("OpenDAL object does not exist: %s", path_p);
 	}
-	return make_uniq<OpenDALFileHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p, options);
+	if (options.read) {
+		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p);
+	}
+	return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p);
 }
 
 bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener> opener_p) {
@@ -109,14 +112,14 @@ int64_t OpenDALFileSystem::GetFileSize(FileHandle &handle_p) {
 }
 
 void OpenDALFileSystem::Read(FileHandle &handle_p, void *buffer_p, int64_t size_p, idx_t offset_p) {
-	if (size_p < 0 || handle_p.Cast<OpenDALFileHandle>().Read(buffer_p, static_cast<idx_t>(size_p), offset_p) !=
+	if (size_p < 0 || handle_p.Cast<OpenDALReadHandle>().Read(buffer_p, static_cast<idx_t>(size_p), offset_p) !=
 	                      static_cast<idx_t>(size_p)) {
 		throw IOException("Could not read the requested number of bytes from OpenDAL");
 	}
 }
 
 void OpenDALFileSystem::Write(FileHandle &handle_p, void *buffer_p, int64_t size_p, idx_t offset_p) {
-	if (size_p < 0 || handle_p.Cast<OpenDALFileHandle>().Write(buffer_p, static_cast<idx_t>(size_p), offset_p) !=
+	if (size_p < 0 || handle_p.Cast<OpenDALWriteHandle>().Write(buffer_p, static_cast<idx_t>(size_p), offset_p) !=
 	                      static_cast<idx_t>(size_p)) {
 		throw IOException("Could not write the requested number of bytes to OpenDAL");
 	}
@@ -126,14 +129,14 @@ int64_t OpenDALFileSystem::Read(FileHandle &handle_p, void *buffer_p, int64_t si
 	if (size_p < 0) {
 		throw InvalidInputException("OpenDAL read size must not be negative");
 	}
-	return handle_p.Cast<OpenDALFileHandle>().Read(buffer_p, static_cast<idx_t>(size_p));
+	return handle_p.Cast<OpenDALReadHandle>().Read(buffer_p, static_cast<idx_t>(size_p));
 }
 
 int64_t OpenDALFileSystem::Write(FileHandle &handle_p, void *buffer_p, int64_t size_p) {
 	if (size_p < 0) {
 		throw InvalidInputException("OpenDAL write size must not be negative");
 	}
-	return handle_p.Cast<OpenDALFileHandle>().Write(buffer_p, static_cast<idx_t>(size_p));
+	return handle_p.Cast<OpenDALWriteHandle>().Write(buffer_p, static_cast<idx_t>(size_p));
 }
 
 bool OpenDALFileSystem::Trim(FileHandle &handle_p, idx_t offset_p, idx_t length_p) {
@@ -142,12 +145,6 @@ bool OpenDALFileSystem::Trim(FileHandle &handle_p, idx_t offset_p, idx_t length_
 
 FileMetadata OpenDALFileSystem::Stats(FileHandle &handle_p) {
 	auto &handle = handle_p.Cast<OpenDALFileHandle>();
-	if (handle.options.write) {
-		FileMetadata result;
-		result.file_size = static_cast<int64_t>(handle.Size());
-		result.file_type = FileType::FILE_TYPE_REGULAR;
-		return result;
-	}
 	const auto metadata = handle.op->Stat(handle.path);
 	FileMetadata result;
 	result.file_size = static_cast<int64_t>(metadata.ContentLength());
@@ -168,9 +165,6 @@ timestamp_t OpenDALFileSystem::GetLastModifiedTime(FileHandle &handle_p) {
 
 string OpenDALFileSystem::GetVersionTag(FileHandle &handle_p) {
 	auto &handle = handle_p.Cast<OpenDALFileHandle>();
-	if (handle.options.write) {
-		return string();
-	}
 	const auto metadata = handle.op->Stat(handle.path);
 	return metadata.Etag().value_or(string());
 }
@@ -184,22 +178,22 @@ void OpenDALFileSystem::FileSync(FileHandle &handle_p) {
 }
 
 void OpenDALFileSystem::Reset(FileHandle &handle_p) {
-	handle_p.Cast<OpenDALFileHandle>().Seek(0);
+	handle_p.Cast<OpenDALReadHandle>().Seek(0);
 }
 
 void OpenDALFileSystem::Seek(FileHandle &handle_p, idx_t location_p) {
-	handle_p.Cast<OpenDALFileHandle>().Seek(location_p);
+	handle_p.Cast<OpenDALReadHandle>().Seek(location_p);
 }
 
 idx_t OpenDALFileSystem::SeekPosition(FileHandle &handle_p) {
-	return handle_p.Cast<OpenDALFileHandle>().Tell();
+	if (handle_p.GetFlags().OpenForReading()) {
+		return handle_p.Cast<OpenDALReadHandle>().Tell();
+	}
+	return handle_p.Cast<OpenDALWriteHandle>().Tell();
 }
 
 void OpenDALFileSystem::Truncate(FileHandle &handle_p, int64_t size_p) {
-	if (size_p < 0) {
-		throw InvalidInputException("OpenDAL truncate size must not be negative");
-	}
-	handle_p.Cast<OpenDALFileHandle>().Truncate(static_cast<idx_t>(size_p));
+	throw NotImplementedException("OpenDAL truncate is not supported");
 }
 
 void OpenDALFileSystem::CreateDirectory(const string &path_p, optional_ptr<FileOpener> opener_p) {
@@ -374,14 +368,8 @@ bool OpenDALFileSystem::IsManuallySet() {
 }
 
 OpenDALFileHandle::OpenDALFileHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
-                                     string path_p, FileOpenFlags flags_p, OpenDALOpenOptions options_p)
-    : FileHandle(fs_p, std::move(full_path_p), flags_p), op(std::move(op_p)), path(std::move(path_p)),
-      options(options_p) {
-	if (options.write) {
-		dirty = true;
-	} else {
-		reader = make_uniq<opendal::Reader>(op->GetReader(path));
-	}
+                                     string path_p, FileOpenFlags flags_p)
+    : FileHandle(fs_p, std::move(full_path_p), flags_p), op(std::move(op_p)), path(std::move(path_p)) {
 }
 
 OpenDALFileHandle::~OpenDALFileHandle() noexcept {
@@ -394,21 +382,26 @@ void OpenDALFileHandle::EnsureOpen() const {
 	}
 }
 
-void OpenDALFileHandle::EnsureReadable() const {
+idx_t OpenDALFileHandle::Size() const {
 	EnsureOpen();
-	if (!options.read) {
-		throw IOException("OpenDAL file handle is not readable");
-	}
+	return op->Stat(path).ContentLength();
 }
 
-void OpenDALFileHandle::EnsureWritable() const {
+void OpenDALFileHandle::Flush() {
 	EnsureOpen();
-	if (!options.write) {
-		throw IOException("OpenDAL file handle is not writable");
-	}
 }
 
-idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
+void OpenDALFileHandle::Close() {
+	closed = true;
+}
+
+OpenDALReadHandle::OpenDALReadHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
+                                     string path_p, FileOpenFlags flags_p)
+    : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p),
+      reader(make_uniq<opendal::Reader>(op->GetReader(path))) {
+}
+
+idx_t OpenDALReadHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
 	if (size_p == 0) {
 		return 0;
 	}
@@ -429,8 +422,8 @@ idx_t OpenDALFileHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
 	return ReadFromOpenDAL(positional_reader, buffer_p, size_p);
 }
 
-idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p) {
-	EnsureReadable();
+idx_t OpenDALReadHandle::Read(void *buffer_p, idx_t size_p) {
+	EnsureOpen();
 	if (size_p == 0) {
 		return 0;
 	}
@@ -443,105 +436,75 @@ idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p) {
 	if (size_p > static_cast<idx_t>(NumericLimits<std::streamsize>::Maximum())) {
 		throw IOException("Read size exceeds OpenDAL reader range");
 	}
-	if (position != reader_position) {
-		reader->Seek(static_cast<std::streamoff>(position), std::ios_base::beg);
-		reader_position = position;
-	}
 	const auto read_size = ReadFromOpenDAL(*reader, buffer_p, size_p);
 	position += read_size;
-	reader_position += read_size;
 	return read_size;
 }
 
-idx_t OpenDALFileHandle::Read(void *buffer_p, idx_t size_p, idx_t offset_p) {
-	EnsureReadable();
+idx_t OpenDALReadHandle::Read(void *buffer_p, idx_t size_p, idx_t offset_p) {
+	EnsureOpen();
 	return ReadAt(buffer_p, size_p, offset_p);
 }
 
-idx_t OpenDALFileHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offset_p) {
+void OpenDALReadHandle::Seek(idx_t offset_p) {
+	EnsureOpen();
+	if (offset_p > static_cast<idx_t>(NumericLimits<std::streamoff>::Maximum())) {
+		throw IOException("Seek offset exceeds OpenDAL reader range");
+	}
+	reader->Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
+	position = offset_p;
+}
+
+idx_t OpenDALReadHandle::Tell() const {
+	EnsureOpen();
+	return position;
+}
+
+void OpenDALReadHandle::Close() {
+	if (closed) {
+		return;
+	}
+	reader.reset();
+	OpenDALFileHandle::Close();
+}
+
+OpenDALWriteHandle::OpenDALWriteHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
+                                       string path_p, FileOpenFlags flags_p)
+    : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p) {
+	op->Write(path, std::string_view());
+}
+
+idx_t OpenDALWriteHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offset_p) {
 	if (size_p == 0) {
 		return 0;
 	}
 	if (!buffer_p) {
 		throw InvalidInputException("write buffer must not be null");
 	}
-	if (size_p > NumericLimits<std::size_t>::Maximum() ||
-	    offset_p > static_cast<idx_t>(NumericLimits<std::size_t>::Maximum()) - size_p) {
-		throw IOException("Write exceeds addressable object size");
+	if (offset_p != 0) {
+		throw IOException("Multiple OpenDAL write calls require streaming writer support from the C++ binding");
 	}
-	const auto end = static_cast<std::size_t>(offset_p + size_p);
-	if (end > data.size()) {
-		data.resize(end, '\0');
-	}
-	std::memcpy(data.data() + offset_p, buffer_p, size_p);
-	dirty = true;
+	op->Write(path, std::string_view(static_cast<const char *>(buffer_p), size_p));
 	return size_p;
 }
 
-idx_t OpenDALFileHandle::Write(const void *buffer_p, idx_t size_p) {
-	EnsureWritable();
-	const auto offset = position;
-	const auto write_size = WriteAt(buffer_p, size_p, offset);
-	position = offset + write_size;
-	return write_size;
+idx_t OpenDALWriteHandle::Write(const void *buffer_p, idx_t size_p) {
+	return Write(buffer_p, size_p, position);
 }
 
-idx_t OpenDALFileHandle::Write(const void *buffer_p, idx_t size_p, idx_t offset_p) {
-	EnsureWritable();
+idx_t OpenDALWriteHandle::Write(const void *buffer_p, idx_t size_p, idx_t offset_p) {
+	EnsureOpen();
 	if (offset_p != position) {
 		throw IOException("Non-sequential OpenDAL writes are not supported");
 	}
-	return Write(buffer_p, size_p);
+	const auto write_size = WriteAt(buffer_p, size_p, offset_p);
+	position += write_size;
+	return write_size;
 }
 
-void OpenDALFileHandle::Seek(idx_t offset_p) {
-	EnsureOpen();
-	position = offset_p;
-}
-
-idx_t OpenDALFileHandle::Tell() const {
+idx_t OpenDALWriteHandle::Tell() const {
 	EnsureOpen();
 	return position;
-}
-
-idx_t OpenDALFileHandle::Size() const {
-	EnsureOpen();
-	if (options.write) {
-		return data.size();
-	}
-	return op->Stat(path).ContentLength();
-}
-
-void OpenDALFileHandle::Truncate(idx_t size_p) {
-	EnsureWritable();
-	if (size_p > NumericLimits<std::size_t>::Maximum()) {
-		throw IOException("Truncate size exceeds addressable object size");
-	}
-	data.resize(static_cast<std::size_t>(size_p), '\0');
-	if (position > size_p) {
-		position = size_p;
-	}
-	dirty = true;
-}
-
-void OpenDALFileHandle::Flush() {
-	EnsureOpen();
-	if (options.write && dirty) {
-		op->Write(path, data);
-		dirty = false;
-	}
-}
-
-void OpenDALFileHandle::Close() {
-	if (closed) {
-		return;
-	}
-	if (options.write && dirty) {
-		op->Write(path, data);
-		dirty = false;
-	}
-	reader.reset();
-	closed = true;
 }
 
 } // namespace duckdb
