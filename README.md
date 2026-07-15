@@ -101,11 +101,10 @@ temporary versus persistent secrets and longest-prefix scope matching. See the
 [DuckDB secrets documentation](https://duckdb.org/docs/stable/configuration/secrets_manager) for secret lifecycle and
 storage behavior.
 
-## Current limitations
+## Known limitation
 
-- Writes are buffered in memory and currently support sequential access only.
-- Generic glob expansion is not supported by OpenDALFS.
-- Backend availability does not guarantee that every backend-specific authentication combination has been tested.
+- Every read operation currently incurs an extra memory copy because DuckDB's filesystem read API uses caller-provided
+  memory buffers. See [DuckDB discussion #21546](https://github.com/duckdb/duckdb/discussions/21546) for details.
 
 ## License
 
