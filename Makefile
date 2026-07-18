@@ -1,10 +1,13 @@
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-# OpenDAL's C++ binding invokes Cargo from CMake-generated build rules. Keep a
-# project-local toolchain discoverable by configure and every nested make.
+# OpenDAL's C++ binding invokes Cargo from CMake-generated build rules. Use the
+# project-local toolchain when present; CI otherwise supplies a system toolchain
+# with the required cross-compilation targets already installed.
+ifneq ($(wildcard $(PROJ_DIR).cargo/bin/cargo),)
 export CARGO_HOME := $(PROJ_DIR).cargo
 export RUSTUP_HOME := $(PROJ_DIR).rustup
 export PATH := $(CARGO_HOME)/bin:$(PATH)
+endif
 export MACOSX_DEPLOYMENT_TARGET ?= 15.0
 
 # Configuration of extension
