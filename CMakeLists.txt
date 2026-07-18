@@ -116,6 +116,10 @@ target_compile_features(${LOADABLE_EXTENSION_NAME} PRIVATE cxx_std_17)
 # and the separately loadable .duckdb_extension artifact.
 target_link_libraries(${EXTENSION_NAME} duckdb_opendalfs_core)
 target_link_libraries(${LOADABLE_EXTENSION_NAME} duckdb_opendalfs_core)
+if(MINGW OR WIN32)
+  target_link_libraries(${EXTENSION_NAME} userenv ws2_32 bcrypt)
+  target_link_libraries(${LOADABLE_EXTENSION_NAME} userenv ws2_32 bcrypt)
+endif()
 if(APPLE)
   # Cargo's security-framework crates are embedded in the Rust static archive;
   # their native dependencies must be forwarded to every final consumer.

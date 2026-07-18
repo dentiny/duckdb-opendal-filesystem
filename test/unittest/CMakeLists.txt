@@ -19,3 +19,7 @@ else()
   target_link_libraries(unittest_duckdb_opendalfs test_helpers duckdb_static)
   link_extension_libraries(unittest_duckdb_opendalfs "")
 endif()
+
+if(MINGW OR WIN32)
+  target_link_libraries(unittest_duckdb_opendalfs userenv ws2_32 bcrypt)
+endif()
