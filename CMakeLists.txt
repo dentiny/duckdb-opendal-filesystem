@@ -8,11 +8,6 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
-set(CMAKE_CXX_STANDARD
-    "17"
-    CACHE STRING "C++ standard to enforce")
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 include_directories(src/include)
 
 # Build the synchronous OpenDAL C++ binding from the pinned submodule. The
