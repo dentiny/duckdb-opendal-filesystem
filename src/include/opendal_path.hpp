@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/unordered_map.hpp"
 
