@@ -8,11 +8,6 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
-set(CMAKE_CXX_STANDARD
-    "17"
-    CACHE STRING "C++ standard to enforce")
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 include_directories(src/include)
 
 # Build the synchronous OpenDAL C++ binding from the pinned submodule. The
@@ -102,7 +97,7 @@ add_library(
   duckdb_opendalfs_core STATIC
   src/opendal_file_system.cpp src/opendal_open_options.cpp src/opendal_path.cpp
   src/opendal_secret.cpp src/opendal_uri.cpp)
-target_compile_features(duckdb_opendalfs_core PUBLIC cxx_std_17)
+target_compile_features(duckdb_opendalfs_core PRIVATE cxx_std_17)
 target_include_directories(duckdb_opendalfs_core PUBLIC src/include)
 target_link_libraries(duckdb_opendalfs_core PUBLIC opendal_cpp)
 
@@ -121,6 +116,10 @@ target_compile_features(${LOADABLE_EXTENSION_NAME} PRIVATE cxx_std_17)
 # and the separately loadable .duckdb_extension artifact.
 target_link_libraries(${EXTENSION_NAME} duckdb_opendalfs_core)
 target_link_libraries(${LOADABLE_EXTENSION_NAME} duckdb_opendalfs_core)
+if(MINGW OR WIN32)
+  target_link_libraries(${EXTENSION_NAME} userenv ws2_32 bcrypt)
+  target_link_libraries(${LOADABLE_EXTENSION_NAME} userenv ws2_32 bcrypt)
+endif()
 if(APPLE)
   # Cargo's security-framework crates are embedded in the Rust static archive;
   # their native dependencies must be forwarded to every final consumer.

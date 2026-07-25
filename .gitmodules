@@ -8,4 +8,4 @@
 	branch = main
 [submodule "opendal"]
 	path = opendal
-	url = https://github.com/apache/opendal.git
+	url = https://github.com/dentiny/opendal.git
