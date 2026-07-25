@@ -17,21 +17,11 @@ Track these steps as a checklist and do not skip ahead:
 
 1. Fetch tags and pin the `duckdb` submodule to `tags/$TARGET`.
 2. Pin `extension-ci-tools` to the matching release tag or the release-compatible tag required by DuckDB.
-3. Update DuckDB and CI-tools version references in `.github/workflows/MainDistributionPipeline.yml`.
-4. Leave the `opendal` submodule unchanged unless compilation demonstrates a compatibility issue.
+3. Upgrade the `opendal` submodule to the latest upstream version.
 5. Run `make format-all`.
 6. Build with `CMAKE_BUILD_PARALLEL_LEVEL=12 make reldebug`.
-7. Run `build/reldebug/test/unittest test/sql/duckdb_opendalfs.test`.
-8. Review `git diff --submodule=log` and record any compatibility changes in the pull request.
-
-## Verification
-
-The upgrade is complete only when:
-
-* DuckDB and extension-ci-tools point at compatible release revisions.
-* The static and loadable `duckdb_opendalfs` extension targets link successfully.
-* The focused SQL test passes.
-* CI metadata names the same DuckDB release.
+7. Run C++ unit tests with `build/reldebug/test/unittest` and SQL tests with `make test_reldebug`.
+8. Update CHANGELOG.md, add a new release entry.
 
 ## Current dependency model
 
