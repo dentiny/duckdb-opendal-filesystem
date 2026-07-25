@@ -1,7 +1,5 @@
 # Changelog
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/).
-
 ## 0.1.1
 
 ### Changed
