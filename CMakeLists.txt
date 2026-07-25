@@ -83,6 +83,20 @@ if(APPLE OR (UNIX AND NOT WIN32))
   list(REMOVE_ITEM OPENDAL_CPP_INTERFACE_LIBS "${OPENDAL_RUST_LIB}")
   set_target_properties(opendal_cpp PROPERTIES INTERFACE_LINK_LIBRARIES
                                                "${OPENDAL_CPP_INTERFACE_LIBS}")
+  if(APPLE AND Rust_CARGO_TARGET)
+    get_filename_component(OPENDAL_RUST_TARGET_DIR "${OPENDAL_RUST_LIB}"
+                           DIRECTORY)
+    get_filename_component(OPENDAL_RUST_TARGET_DIR "${OPENDAL_RUST_TARGET_DIR}"
+                           DIRECTORY)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+      set(OPENDAL_RUST_PROFILE debug)
+    else()
+      set(OPENDAL_RUST_PROFILE release)
+    endif()
+    set(OPENDAL_RUST_LIB
+        "${OPENDAL_RUST_TARGET_DIR}/${Rust_CARGO_TARGET}/${OPENDAL_RUST_PROFILE}/${CMAKE_STATIC_LIBRARY_PREFIX}opendal_cpp${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+  endif()
   if(APPLE)
     target_link_libraries(opendal_cpp
                           INTERFACE "-Wl,-force_load,${OPENDAL_RUST_LIB}")

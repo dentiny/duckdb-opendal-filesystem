@@ -9,6 +9,11 @@ export RUSTUP_HOME := $(PROJ_DIR).rustup
 export PATH := $(CARGO_HOME)/bin:$(PATH)
 endif
 export MACOSX_DEPLOYMENT_TARGET ?= 15.0
+ifeq ($(OSX_BUILD_ARCH),arm64)
+export CARGO_BUILD_TARGET ?= aarch64-apple-darwin
+else ifeq ($(OSX_BUILD_ARCH),x86_64)
+export CARGO_BUILD_TARGET ?= x86_64-apple-darwin
+endif
 
 # Configuration of extension
 EXT_NAME=duckdb_opendalfs
