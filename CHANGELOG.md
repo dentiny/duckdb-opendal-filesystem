@@ -4,4 +4,6 @@
 
 ### Changed
 
-- Bumpup all submodules to DuckDB `v1.5.5`.
+- Bump all submodules to DuckDB `v1.5.5`.
+
+- Pin OpenDAL to the latest upstream `main` commit.
