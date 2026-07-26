@@ -73,6 +73,22 @@ set(OPENDAL_FEATURES
     CACHE STRING "OpenDAL storage backend features" FORCE)
 add_subdirectory(opendal/bindings/cpp opendal-cpp)
 
+if(APPLE AND Rust_CARGO_TARGET)
+  # OpenDAL's C++ CMake expects cxx to generate headers under target/cxxbridge,
+  # while Cargo puts them under target/<triple>/cxxbridge for targeted builds.
+  set(OPENDAL_CARGO_TARGET_ROOT
+      "${CMAKE_CURRENT_LIST_DIR}/opendal/bindings/cpp/target")
+  add_custom_target(
+    opendal_cpp_target_cxxbridge
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${OPENDAL_CARGO_TARGET_ROOT}/cxxbridge"
+    COMMAND
+      ${CMAKE_COMMAND} -E create_symlink
+      "${OPENDAL_CARGO_TARGET_ROOT}/${Rust_CARGO_TARGET}/cxxbridge"
+      "${OPENDAL_CARGO_TARGET_ROOT}/cxxbridge"
+    DEPENDS cargo_build)
+  add_dependencies(opendal_cpp opendal_cpp_target_cxxbridge)
+endif()
+
 # OpenDAL installs its default HTTP transporter from a Rust static constructor.
 # Retain the Rust archive published by the binding so that constructor is not
 # discarded by the final executable or extension link.
