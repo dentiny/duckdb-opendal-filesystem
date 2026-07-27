@@ -1,7 +1,8 @@
 #include "catch/catch.hpp"
 #include "opendal_file_system.hpp"
-#include "opendal_operator.hpp"
 #include "opendal_path.hpp"
+
+#include <opendal.hpp>
 
 #include <cstring>
 #include <thread>

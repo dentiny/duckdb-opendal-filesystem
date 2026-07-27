@@ -1,5 +1,5 @@
 #include "catch/catch.hpp"
-#include "opendal_operator.hpp"
+#include "opendal_layer_options.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -73,7 +73,7 @@ private:
 				return;
 			}
 			char request[4096];
-			(void)recv(client_fd, request, sizeof(request), 0);
+			recv(client_fd, request, sizeof(request), 0);
 			const auto current = ++request_count;
 			if (mode == Mode::DELAY) {
 				std::this_thread::sleep_for(delay);
@@ -82,7 +82,7 @@ private:
 				    current < expected_requests
 				        ? "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 				        : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-				(void)send(client_fd, response, std::strlen(response), 0);
+				send(client_fd, response, std::strlen(response), 0);
 			}
 			shutdown(client_fd, SHUT_RDWR);
 			close(client_fd);
@@ -103,12 +103,9 @@ private:
 
 TEST_CASE("OpenDAL timeout layer stops a stalled service request", "[opendalfs][layers]") {
 	MockHttpService service(MockHttpService::Mode::DELAY, 1, std::chrono::milliseconds(500));
-	opendal::LayerOptions layers;
-	layers.timeout_ms = 25;
-	layers.io_timeout_ms = 25;
-	layers.retry_max_times = 0;
-
-	opendal::Operator op("http", {{"endpoint", service.Endpoint()}}, layers);
+	std::vector<std::unique_ptr<opendal::OperatorOption>> layers;
+	layers.push_back(opendal::WithTimeout(std::chrono::milliseconds(25), std::chrono::milliseconds(25)));
+	opendal::Operator op("http", {{"endpoint", service.Endpoint()}}, std::move(layers));
 	const auto started = std::chrono::steady_clock::now();
 	REQUIRE_THROWS(op.Stat("stalled.csv"));
 	const auto elapsed = std::chrono::steady_clock::now() - started;
@@ -118,7 +115,7 @@ TEST_CASE("OpenDAL timeout layer stops a stalled service request", "[opendalfs][
 
 TEST_CASE("OpenDAL retry layer retries temporary service failures", "[opendalfs][layers]") {
 	MockHttpService service(MockHttpService::Mode::RETRY_THEN_SUCCEED, 3);
-	opendal::LayerOptions layers;
+	OpenDALLayerOptions layers;
 	layers.timeout_ms = 1000;
 	layers.io_timeout_ms = 1000;
 	layers.retry_max_times = 3;
@@ -126,7 +123,7 @@ TEST_CASE("OpenDAL retry layer retries temporary service failures", "[opendalfs]
 	layers.retry_max_delay_ms = 1;
 	layers.retry_jitter = false;
 
-	opendal::Operator op("http", {{"endpoint", service.Endpoint()}}, layers);
+	opendal::Operator op("http", {{"endpoint", service.Endpoint()}}, layers.ToOperatorOptions());
 	REQUIRE_NOTHROW(op.Stat("eventually-available.csv"));
 	REQUIRE(service.RequestCount() == 3);
 }

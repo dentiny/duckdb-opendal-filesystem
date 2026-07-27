@@ -17,13 +17,13 @@ void ReadSetting(optional_ptr<FileOpener> opener_p, const char *name_p, T &targe
 
 OpenDALLayerOptions OpenDALLayerOptions::FromSettings(optional_ptr<FileOpener> opener_p) {
 	OpenDALLayerOptions result;
-	ReadSetting(opener_p, TIMEOUT, result.timeout_ms);
-	ReadSetting(opener_p, IO_TIMEOUT, result.io_timeout_ms);
-	ReadSetting(opener_p, RETRY_MAX_TIMES, result.retry_max_times);
-	ReadSetting(opener_p, RETRY_FACTOR, result.retry_factor);
-	ReadSetting(opener_p, RETRY_MIN_DELAY, result.retry_min_delay_ms);
-	ReadSetting(opener_p, RETRY_MAX_DELAY, result.retry_max_delay_ms);
-	ReadSetting(opener_p, RETRY_JITTER, result.retry_jitter);
+	ReadSetting(opener_p, opendal_config::TIMEOUT, result.timeout_ms);
+	ReadSetting(opener_p, opendal_config::IO_TIMEOUT, result.io_timeout_ms);
+	ReadSetting(opener_p, opendal_config::RETRY_MAX_TIMES, result.retry_max_times);
+	ReadSetting(opener_p, opendal_config::RETRY_FACTOR, result.retry_factor);
+	ReadSetting(opener_p, opendal_config::RETRY_MIN_DELAY, result.retry_min_delay_ms);
+	ReadSetting(opener_p, opendal_config::RETRY_MAX_DELAY, result.retry_max_delay_ms);
+	ReadSetting(opener_p, opendal_config::RETRY_JITTER, result.retry_jitter);
 	result.Validate();
 	return result;
 }
@@ -35,6 +35,9 @@ void OpenDALLayerOptions::Validate() const {
 	}
 	if (io_timeout_ms == 0) {
 		throw InvalidInputException("opendal_io_timeout_ms must be greater than zero");
+	}
+	if (retry_max_times == 0) {
+		throw InvalidInputException("opendal_retry_max_times must be greater than zero");
 	}
 	if (!std::isfinite(retry_factor) || retry_factor < 1.0 ||
 	    retry_factor > static_cast<double>(std::numeric_limits<float>::max())) {
@@ -52,16 +55,18 @@ void OpenDALLayerOptions::Validate() const {
 	}
 }
 
-opendal::LayerOptions OpenDALLayerOptions::ToOperatorOptions() const {
+std::vector<std::unique_ptr<opendal::OperatorOption>> OpenDALLayerOptions::ToOperatorOptions() const {
 	Validate();
-	opendal::LayerOptions result;
-	result.timeout_ms = timeout_ms;
-	result.io_timeout_ms = io_timeout_ms;
-	result.retry_max_times = retry_max_times;
-	result.retry_factor = static_cast<float>(retry_factor);
-	result.retry_min_delay_ms = retry_min_delay_ms;
-	result.retry_max_delay_ms = retry_max_delay_ms;
-	result.retry_jitter = retry_jitter;
+	std::vector<std::unique_ptr<opendal::OperatorOption>> result;
+	result.push_back(
+	    opendal::WithTimeout(std::chrono::milliseconds(timeout_ms), std::chrono::milliseconds(io_timeout_ms)));
+	opendal::RetryConfig retry;
+	retry.max_times = retry_max_times;
+	retry.factor = static_cast<float>(retry_factor);
+	retry.min_delay = std::chrono::milliseconds(retry_min_delay_ms);
+	retry.max_delay = std::chrono::milliseconds(retry_max_delay_ms);
+	retry.jitter = retry_jitter;
+	result.push_back(opendal::WithRetry(retry));
 	return result;
 }
 
