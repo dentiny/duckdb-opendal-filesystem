@@ -103,12 +103,15 @@ storage behavior.
 
 ## Timeout and retry settings
 
-Every OpenDAL operator uses a timeout layer inside a retry layer. This gives each retry attempt its own timeout.
-OpenDAL retries only errors that the storage service marks as temporary.
+Every OpenDAL operator uses a timeout layer and a retry layer by default. This gives each retry attempt its own timeout.
+OpenDAL retries only errors that the storage service marks as temporary. Both layers can be disabled when needed.
 
 ```sql
+SET opendal_timeout_layer_enabled = true;
 SET opendal_timeout_ms = 60000;          -- control operations such as stat and rename
 SET opendal_io_timeout_ms = 10000;       -- reads, writes, lists, and streaming calls
+
+SET opendal_retry_layer_enabled = true;
 SET opendal_retry_max_times = 3;
 SET opendal_retry_factor = 2.0;
 SET opendal_retry_min_delay_ms = 1000;

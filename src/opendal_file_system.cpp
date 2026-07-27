@@ -31,6 +31,16 @@ idx_t ReadFromOpenDAL(opendal::Reader &reader_p, void *buffer_p, idx_t size_p) {
 	return total_read;
 }
 
+std::vector<std::unique_ptr<opendal::OperatorOption>>
+ToOpenDALOperatorOptions(vector<unique_ptr<opendal::OperatorOption>> options_p) {
+	std::vector<std::unique_ptr<opendal::OperatorOption>> result;
+	result.reserve(options_p.size());
+	for (auto &option : options_p) {
+		result.push_back(std::unique_ptr<opendal::OperatorOption>(option.release()));
+	}
+	return result;
+}
+
 } // namespace
 
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
@@ -61,8 +71,8 @@ unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &ur
 			}
 		}
 	}
-	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result,
-	                                    OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions());
+	auto options = OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions();
+	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, ToOpenDALOperatorOptions(std::move(options)));
 }
 
 unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpenFlags flags_p,

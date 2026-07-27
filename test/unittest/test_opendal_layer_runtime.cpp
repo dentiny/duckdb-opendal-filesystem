@@ -99,6 +99,16 @@ private:
 	std::thread worker;
 };
 
+std::vector<std::unique_ptr<opendal::OperatorOption>>
+ToOpenDALOperatorOptions(vector<unique_ptr<opendal::OperatorOption>> options_p) {
+	std::vector<std::unique_ptr<opendal::OperatorOption>> result;
+	result.reserve(options_p.size());
+	for (auto &option : options_p) {
+		result.push_back(std::unique_ptr<opendal::OperatorOption>(option.release()));
+	}
+	return result;
+}
+
 } // namespace
 
 TEST_CASE("OpenDAL timeout layer stops a stalled service request", "[opendalfs][layers]") {
@@ -123,8 +133,20 @@ TEST_CASE("OpenDAL retry layer retries temporary service failures", "[opendalfs]
 	layers.retry_max_delay_ms = 1;
 	layers.retry_jitter = false;
 
-	opendal::Operator op("http", {{"endpoint", service.Endpoint()}}, layers.ToOperatorOptions());
+	opendal::Operator op("http", {{"endpoint", service.Endpoint()}},
+	                     ToOpenDALOperatorOptions(layers.ToOperatorOptions()));
 	REQUIRE_NOTHROW(op.Stat("eventually-available.csv"));
 	REQUIRE(service.RequestCount() == 3);
+}
+
+TEST_CASE("OpenDAL layer options are only pushed when enabled", "[opendalfs][layers]") {
+	OpenDALLayerOptions layers;
+	REQUIRE(layers.ToOperatorOptions().size() == 2);
+
+	layers.timeout_layer_enabled = false;
+	REQUIRE(layers.ToOperatorOptions().size() == 1);
+
+	layers.retry_layer_enabled = false;
+	REQUIRE(layers.ToOperatorOptions().empty());
 }
 } // namespace duckdb

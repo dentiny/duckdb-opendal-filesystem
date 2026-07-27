@@ -4,16 +4,33 @@
 
 require duckdb_opendalfs
 
-query IIIRIII
-SELECT current_setting('opendal_timeout_ms'),
+query IIIIIRIII
+SELECT current_setting('opendal_timeout_layer_enabled'),
+       current_setting('opendal_timeout_ms'),
        current_setting('opendal_io_timeout_ms'),
+       current_setting('opendal_retry_layer_enabled'),
        current_setting('opendal_retry_max_times'),
        current_setting('opendal_retry_factor'),
        current_setting('opendal_retry_min_delay_ms'),
        current_setting('opendal_retry_max_delay_ms'),
        current_setting('opendal_retry_jitter');
 ----
-60000	10000	3	2.0	1000	60000	false
+true	60000	10000	true	3	2.0	1000	60000	false
+
+statement ok
+SET opendal_timeout_layer_enabled = false;
+
+statement ok
+SET opendal_retry_layer_enabled = false;
+
+statement ok
+COPY (SELECT 42 AS value) TO 'memory://disabled-layers.csv' (HEADER);
+
+statement ok
+SET opendal_timeout_layer_enabled = true;
+
+statement ok
+SET opendal_retry_layer_enabled = true;
 
 statement ok
 SET opendal_timeout_ms = 2500;
@@ -39,19 +56,20 @@ SET opendal_retry_jitter = true;
 statement ok
 COPY (SELECT 42 AS value) TO 'memory://configured-layers.csv' (HEADER);
 
-query IIIRIII
-SELECT current_setting('opendal_timeout_ms'),
+query IIIIIRIII
+SELECT current_setting('opendal_timeout_layer_enabled'),
+       current_setting('opendal_timeout_ms'),
        current_setting('opendal_io_timeout_ms'),
+       current_setting('opendal_retry_layer_enabled'),
        current_setting('opendal_retry_max_times'),
        current_setting('opendal_retry_factor'),
        current_setting('opendal_retry_min_delay_ms'),
        current_setting('opendal_retry_max_delay_ms'),
        current_setting('opendal_retry_jitter');
 ----
-2500	500	1	1.5	10	20	true
+true	2500	500	true	1	1.5	10	20	true
 
-statement ok
+statement error
 SET opendal_retry_factor = 0.5;
-
-statement error opendal_retry_factor must be finite and at least 1.0
-SELECT * FROM read_csv_auto('memory://invalid-layer-options.csv');
+----
+opendal_retry_factor must be finite and at least 1.0
