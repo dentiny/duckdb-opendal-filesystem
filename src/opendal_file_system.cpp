@@ -6,8 +6,8 @@
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "opendal_path.hpp"
-
-#include <opendal.hpp>
+#include "opendal_layer_options.hpp"
+#include "opendal_operator.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -41,22 +41,23 @@ unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &ur
 		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", uri_p);
 	}
 	auto result = config;
+	const auto layer_options = OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions();
 	for (const auto &entry : parsed_path_p.uri_config) {
 		result[entry.first] = entry.second;
 	}
 	auto secret_manager = FileOpener::TryGetSecretManager(opener_p);
 	auto transaction = FileOpener::TryGetCatalogTransaction(opener_p);
 	if (!secret_manager || !transaction) {
-		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
+		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, layer_options);
 	}
 
 	if (parsed_path_p.secret_type == OpenDALSecretType::NONE) {
-		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
+		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, layer_options);
 	}
 	auto secret_match =
 	    secret_manager->LookupSecret(*transaction, uri_p, OpenDALSecretTypeName(parsed_path_p.secret_type));
 	if (!secret_match.HasMatch()) {
-		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
+		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, layer_options);
 	}
 	const auto &secret = dynamic_cast<const KeyValueSecret &>(*secret_match.secret_entry->secret);
 	for (const auto &entry : secret.secret_map) {
@@ -66,7 +67,7 @@ unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &ur
 		}
 		result[key] = entry.second.ToString();
 	}
-	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
+	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, layer_options);
 }
 
 unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpenFlags flags_p,

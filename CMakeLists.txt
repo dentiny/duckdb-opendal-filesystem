@@ -10,23 +10,13 @@ project(${TARGET_NAME})
 
 include_directories(src/include)
 
-# Build the synchronous OpenDAL C++ binding from the pinned submodule. The
-# binding drives its Rust build through Cargo and exposes the opendal_cpp CMake
-# target, including all generated cxx bridge headers and native libraries.
+# Build the pinned OpenDAL C binding. The extension owns its C++ RAII wrapper,
+# allowing layers to be configured without modifying the OpenDAL submodule.
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/.cargo/bin/cargo")
   set(ENV{CARGO_HOME} "${CMAKE_CURRENT_LIST_DIR}/.cargo")
   set(ENV{RUSTUP_HOME} "${CMAKE_CURRENT_LIST_DIR}/.rustup")
   set(ENV{PATH} "${CMAKE_CURRENT_LIST_DIR}/.cargo/bin:$ENV{PATH}")
 endif()
-set(OPENDAL_ENABLE_ASYNC
-    OFF
-    CACHE BOOL "Build OpenDAL's async C++ API" FORCE)
-set(OPENDAL_ENABLE_TESTING
-    OFF
-    CACHE BOOL "Build OpenDAL's C++ tests" FORCE)
-set(OPENDAL_ENABLE_DOCUMENTATION
-    OFF
-    CACHE BOOL "Build OpenDAL's C++ docs" FORCE)
 # OpenDAL registers services at compile time. Enable every storage backend
 # exposed by the pinned OpenDAL revision so one extension binary can select any
 # of them at runtime.
@@ -68,37 +58,22 @@ set(OPENDAL_SERVICE_FEATURES
     services-yandex-disk)
 list(TRANSFORM OPENDAL_SERVICE_FEATURES PREPEND "opendal/")
 list(JOIN OPENDAL_SERVICE_FEATURES "," OPENDAL_FEATURES_VALUE)
-set(OPENDAL_FEATURES
+set(FEATURES
     "${OPENDAL_FEATURES_VALUE}"
     CACHE STRING "OpenDAL storage backend features" FORCE)
-add_subdirectory(opendal/bindings/cpp opendal-cpp)
-
-if(APPLE AND Rust_CARGO_TARGET)
-  # OpenDAL's C++ CMake expects cxx to generate headers under target/cxxbridge,
-  # while Cargo puts them under target/<triple>/cxxbridge for targeted builds.
-  set(OPENDAL_CARGO_TARGET_ROOT
-      "${CMAKE_CURRENT_LIST_DIR}/opendal/bindings/cpp/target")
-  add_custom_target(
-    opendal_cpp_target_cxxbridge
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${OPENDAL_CARGO_TARGET_ROOT}/cxxbridge"
-    COMMAND
-      ${CMAKE_COMMAND} -E create_symlink
-      "${OPENDAL_CARGO_TARGET_ROOT}/${Rust_CARGO_TARGET}/cxxbridge"
-      "${OPENDAL_CARGO_TARGET_ROOT}/cxxbridge"
-    DEPENDS cargo_build)
-  add_dependencies(opendal_cpp opendal_cpp_target_cxxbridge)
-endif()
+add_subdirectory(opendal/bindings/c opendal-c EXCLUDE_FROM_ALL)
 
 # OpenDAL installs its default HTTP transporter from a Rust static constructor.
 # Retain the Rust archive published by the binding so that constructor is not
 # discarded by the final executable or extension link.
 if(APPLE OR (UNIX AND NOT WIN32))
-  get_target_property(OPENDAL_CPP_INTERFACE_LIBS opendal_cpp
+  get_target_property(OPENDAL_C_INTERFACE_LIBS opendal_c_static
                       INTERFACE_LINK_LIBRARIES)
-  list(GET OPENDAL_CPP_INTERFACE_LIBS 0 OPENDAL_RUST_LIB)
-  list(REMOVE_ITEM OPENDAL_CPP_INTERFACE_LIBS "${OPENDAL_RUST_LIB}")
-  set_target_properties(opendal_cpp PROPERTIES INTERFACE_LINK_LIBRARIES
-                                               "${OPENDAL_CPP_INTERFACE_LIBS}")
+  list(GET OPENDAL_C_INTERFACE_LIBS 0 OPENDAL_RUST_LIB)
+  list(REMOVE_ITEM OPENDAL_C_INTERFACE_LIBS "${OPENDAL_RUST_LIB}")
+  set_target_properties(
+    opendal_c_static PROPERTIES INTERFACE_LINK_LIBRARIES
+                                "${OPENDAL_C_INTERFACE_LIBS}")
   if(APPLE AND Rust_CARGO_TARGET)
     get_filename_component(OPENDAL_RUST_TARGET_DIR "${OPENDAL_RUST_LIB}"
                            DIRECTORY)
@@ -110,26 +85,31 @@ if(APPLE OR (UNIX AND NOT WIN32))
       set(OPENDAL_RUST_PROFILE release)
     endif()
     set(OPENDAL_RUST_LIB
-        "${OPENDAL_RUST_TARGET_DIR}/${Rust_CARGO_TARGET}/${OPENDAL_RUST_PROFILE}/${CMAKE_STATIC_LIBRARY_PREFIX}opendal_cpp${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${OPENDAL_RUST_TARGET_DIR}/${Rust_CARGO_TARGET}/${OPENDAL_RUST_PROFILE}/${CMAKE_STATIC_LIBRARY_PREFIX}opendal_c${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
   endif()
   if(APPLE)
-    target_link_libraries(opendal_cpp
+    target_link_libraries(opendal_c_static
                           INTERFACE "-Wl,-force_load,${OPENDAL_RUST_LIB}")
   else()
     target_link_libraries(
-      opendal_cpp INTERFACE "-Wl,--whole-archive" "${OPENDAL_RUST_LIB}"
-                            "-Wl,--no-whole-archive")
+      opendal_c_static INTERFACE "-Wl,--whole-archive" "${OPENDAL_RUST_LIB}"
+                                 "-Wl,--no-whole-archive")
   endif()
 endif()
 
 add_library(
   duckdb_opendalfs_core STATIC
-  src/opendal_file_system.cpp src/opendal_open_options.cpp src/opendal_path.cpp
-  src/opendal_secret.cpp src/opendal_uri.cpp)
+  src/opendal_file_system.cpp
+  src/opendal_layer_options.cpp
+  src/opendal_open_options.cpp
+  src/opendal_operator.cpp
+  src/opendal_path.cpp
+  src/opendal_secret.cpp
+  src/opendal_uri.cpp)
 target_compile_features(duckdb_opendalfs_core PRIVATE cxx_std_17)
 target_include_directories(duckdb_opendalfs_core PUBLIC src/include)
-target_link_libraries(duckdb_opendalfs_core PUBLIC opendal_cpp)
+target_link_libraries(duckdb_opendalfs_core PUBLIC opendal_c_static)
 
 set(EXTENSION_SOURCES src/duckdb_opendalfs_extension.cpp)
 
@@ -154,12 +134,13 @@ if(APPLE)
   # Cargo's security-framework crates are embedded in the Rust static archive;
   # their native dependencies must be forwarded to every final consumer.
   target_link_libraries(
-    opendal_cpp PUBLIC "-framework CoreFoundation" "-framework IOKit"
-                       "-framework Security" "-framework SystemConfiguration")
+    opendal_c_static
+    INTERFACE "-framework CoreFoundation" "-framework IOKit"
+              "-framework Security" "-framework SystemConfiguration")
 endif()
 
 install(
-  TARGETS ${EXTENSION_NAME} duckdb_opendalfs_core opendal_cpp
+  TARGETS ${EXTENSION_NAME} duckdb_opendalfs_core opendal_c_static
   EXPORT "${DUCKDB_EXPORT_SET}"
   LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
   ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
