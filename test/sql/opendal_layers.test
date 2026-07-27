@@ -1,0 +1,75 @@
+# name: test/sql/opendal_layers.test
+# description: Configure OpenDAL timeout and retry layers
+# group: [sql]
+
+require duckdb_opendalfs
+
+query IIIIIRIII
+SELECT current_setting('opendal_timeout_layer_enabled'),
+       current_setting('opendal_timeout_ms'),
+       current_setting('opendal_io_timeout_ms'),
+       current_setting('opendal_retry_layer_enabled'),
+       current_setting('opendal_retry_max_times'),
+       current_setting('opendal_retry_factor'),
+       current_setting('opendal_retry_min_delay_ms'),
+       current_setting('opendal_retry_max_delay_ms'),
+       current_setting('opendal_retry_jitter');
+----
+true	60000	10000	true	3	2.0	1000	60000	false
+
+statement ok
+SET opendal_timeout_layer_enabled = false;
+
+statement ok
+SET opendal_retry_layer_enabled = false;
+
+statement ok
+COPY (SELECT 42 AS value) TO 'memory://disabled-layers.csv' (HEADER);
+
+statement ok
+SET opendal_timeout_layer_enabled = true;
+
+statement ok
+SET opendal_retry_layer_enabled = true;
+
+statement ok
+SET opendal_timeout_ms = 2500;
+
+statement ok
+SET opendal_io_timeout_ms = 500;
+
+statement ok
+SET opendal_retry_max_times = 1;
+
+statement ok
+SET opendal_retry_factor = 1.5;
+
+statement ok
+SET opendal_retry_min_delay_ms = 10;
+
+statement ok
+SET opendal_retry_max_delay_ms = 20;
+
+statement ok
+SET opendal_retry_jitter = true;
+
+statement ok
+COPY (SELECT 42 AS value) TO 'memory://configured-layers.csv' (HEADER);
+
+query IIIIIRIII
+SELECT current_setting('opendal_timeout_layer_enabled'),
+       current_setting('opendal_timeout_ms'),
+       current_setting('opendal_io_timeout_ms'),
+       current_setting('opendal_retry_layer_enabled'),
+       current_setting('opendal_retry_max_times'),
+       current_setting('opendal_retry_factor'),
+       current_setting('opendal_retry_min_delay_ms'),
+       current_setting('opendal_retry_max_delay_ms'),
+       current_setting('opendal_retry_jitter');
+----
+true	2500	500	true	1	1.5	10	20	true
+
+statement error
+SET opendal_retry_factor = 0.5;
+----
+opendal_retry_factor must be finite and at least 1.0

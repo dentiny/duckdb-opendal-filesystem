@@ -6,6 +6,7 @@
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "opendal_path.hpp"
+#include "opendal_layer_options.hpp"
 
 #include <opendal.hpp>
 
@@ -30,6 +31,16 @@ idx_t ReadFromOpenDAL(opendal::Reader &reader_p, void *buffer_p, idx_t size_p) {
 	return total_read;
 }
 
+std::vector<std::unique_ptr<opendal::OperatorOption>>
+ToOpenDALOperatorOptions(vector<unique_ptr<opendal::OperatorOption>> options_p) {
+	std::vector<std::unique_ptr<opendal::OperatorOption>> result;
+	result.reserve(options_p.size());
+	for (auto &option : options_p) {
+		result.push_back(std::unique_ptr<opendal::OperatorOption>(option.release()));
+	}
+	return result;
+}
+
 } // namespace
 
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
@@ -46,27 +57,22 @@ unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &ur
 	}
 	auto secret_manager = FileOpener::TryGetSecretManager(opener_p);
 	auto transaction = FileOpener::TryGetCatalogTransaction(opener_p);
-	if (!secret_manager || !transaction) {
-		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
-	}
-
-	if (parsed_path_p.secret_type == OpenDALSecretType::NONE) {
-		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
-	}
-	auto secret_match =
-	    secret_manager->LookupSecret(*transaction, uri_p, OpenDALSecretTypeName(parsed_path_p.secret_type));
-	if (!secret_match.HasMatch()) {
-		return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
-	}
-	const auto &secret = dynamic_cast<const KeyValueSecret &>(*secret_match.secret_entry->secret);
-	for (const auto &entry : secret.secret_map) {
-		auto key = entry.first;
-		if (key == "bearer_token") {
-			key = "token";
+	if (secret_manager && transaction && parsed_path_p.secret_type != OpenDALSecretType::NONE) {
+		auto secret_match =
+		    secret_manager->LookupSecret(*transaction, uri_p, OpenDALSecretTypeName(parsed_path_p.secret_type));
+		if (secret_match.HasMatch()) {
+			const auto &secret = dynamic_cast<const KeyValueSecret &>(*secret_match.secret_entry->secret);
+			for (const auto &entry : secret.secret_map) {
+				auto key = entry.first;
+				if (key == "bearer_token") {
+					key = "token";
+				}
+				result[key] = entry.second.ToString();
+			}
 		}
-		result[key] = entry.second.ToString();
 	}
-	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result);
+	auto options = OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions();
+	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, ToOpenDALOperatorOptions(std::move(options)));
 }
 
 unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpenFlags flags_p,
