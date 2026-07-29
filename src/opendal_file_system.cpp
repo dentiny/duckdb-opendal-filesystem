@@ -476,8 +476,12 @@ void OpenDALReadHandle::Close() {
 
 OpenDALWriteHandle::OpenDALWriteHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
                                        string path_p, FileOpenFlags flags_p)
-    : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p) {
-	op->Write(path, std::string_view());
+    : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p),
+      writer(make_uniq<opendal::Writer>(op->GetWriter(path))) {
+}
+
+OpenDALWriteHandle::~OpenDALWriteHandle() noexcept {
+	Close();
 }
 
 idx_t OpenDALWriteHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offset_p) {
@@ -487,10 +491,7 @@ idx_t OpenDALWriteHandle::WriteAt(const void *buffer_p, idx_t size_p, idx_t offs
 	if (!buffer_p) {
 		throw InvalidInputException("write buffer must not be null");
 	}
-	if (offset_p != 0) {
-		throw IOException("Multiple OpenDAL write calls require streaming writer support from the C++ binding");
-	}
-	op->Write(path, std::string_view(static_cast<const char *>(buffer_p), size_p));
+	writer->Write(std::string_view(static_cast<const char *>(buffer_p), size_p));
 	return size_p;
 }
 
@@ -511,6 +512,25 @@ idx_t OpenDALWriteHandle::Write(const void *buffer_p, idx_t size_p, idx_t offset
 idx_t OpenDALWriteHandle::Tell() const {
 	EnsureOpen();
 	return position;
+}
+
+idx_t OpenDALWriteHandle::Size() const {
+	EnsureOpen();
+	return position;
+}
+
+void OpenDALWriteHandle::Flush() {
+	EnsureOpen();
+	writer->Flush();
+}
+
+void OpenDALWriteHandle::Close() {
+	if (closed) {
+		return;
+	}
+	writer->Close();
+	writer.reset();
+	OpenDALFileHandle::Close();
 }
 
 } // namespace duckdb
