@@ -101,7 +101,8 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 	if (options.read) {
 		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p);
 	}
-	return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p);
+	return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
+	                                     !exists || options.truncate);
 }
 
 bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener> opener_p) {
@@ -475,9 +476,12 @@ void OpenDALReadHandle::Close() {
 }
 
 OpenDALWriteHandle::OpenDALWriteHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
-                                       string path_p, FileOpenFlags flags_p)
-    : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p),
-      writer(make_uniq<opendal::Writer>(op->GetWriter(path))) {
+                                       string path_p, FileOpenFlags flags_p, bool initialize_empty_p)
+    : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p) {
+	if (initialize_empty_p) {
+		op->Write(path, std::string_view());
+	}
+	writer = make_uniq<opendal::Writer>(op->GetWriter(path));
 }
 
 OpenDALWriteHandle::~OpenDALWriteHandle() noexcept {

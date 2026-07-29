@@ -91,7 +91,7 @@ TEST_CASE("OpenDAL paths configure every registered storage backend", "[opendalf
 	}
 }
 
-TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory backend", "[opendalfs]") {
+TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory backend", "[opendalfs][sequential]") {
 	OpenDALFileSystem fs;
 	auto writer =
 	    fs.OpenFile("memory://hello.txt", FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW);

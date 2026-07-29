@@ -121,7 +121,7 @@ private:
 class OpenDALWriteHandle : public OpenDALFileHandle {
 public:
 	OpenDALWriteHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p, string path_p,
-	                   FileOpenFlags flags_p);
+	                   FileOpenFlags flags_p, bool initialize_empty_p);
 	~OpenDALWriteHandle() noexcept override;
 
 	idx_t Write(const void *buffer_p, idx_t size_p);
