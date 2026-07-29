@@ -96,11 +96,12 @@ TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory 
 	auto writer =
 	    fs.OpenFile("memory://hello.txt", FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW);
 	REQUIRE(!fs.OnDiskFile(*writer));
-	string contents = "hello world";
-	REQUIRE(writer->Write(contents.data(), contents.size()) == contents.size());
+	string first = "hello ";
+	string second = "world";
+	REQUIRE(writer->Write(first.data(), first.size()) == first.size());
+	REQUIRE(writer->Write(second.data(), second.size()) == second.size());
 	REQUIRE(writer->SeekPosition() == 11);
 	REQUIRE(writer->GetFileSize() == 11);
-	REQUIRE_THROWS(writer->Write(contents.data(), contents.size()));
 	REQUIRE_THROWS(fs.Truncate(*writer, 5));
 	fs.FileSync(*writer);
 	writer->Close();

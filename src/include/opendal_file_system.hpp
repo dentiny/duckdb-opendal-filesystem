@@ -12,6 +12,7 @@
 namespace opendal {
 class Operator;
 class Reader;
+class Writer;
 } // namespace opendal
 
 namespace duckdb {
@@ -121,15 +122,20 @@ class OpenDALWriteHandle : public OpenDALFileHandle {
 public:
 	OpenDALWriteHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p, string path_p,
 	                   FileOpenFlags flags_p);
+	~OpenDALWriteHandle() noexcept override;
 
 	idx_t Write(const void *buffer_p, idx_t size_p);
 	idx_t Write(const void *buffer_p, idx_t size_p, idx_t offset_p);
+	idx_t Size() const override;
 	idx_t Tell() const;
+	void Flush() override;
+	void Close() override;
 
 private:
 	idx_t WriteAt(const void *buffer_p, idx_t size_p, idx_t offset_p);
 
 private:
+	unique_ptr<opendal::Writer> writer;
 	idx_t position = 0;
 };
 
