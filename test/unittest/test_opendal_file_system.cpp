@@ -109,7 +109,11 @@ TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory 
 
 	auto op = make_uniq<opendal::Operator>("memory");
 	op->Write("hello.txt", "hello world");
-	OpenDALReadHandle reader(fs, std::move(op), "memory://hello.txt", "hello.txt", FileFlags::FILE_FLAGS_READ);
+	FileMetadata hello_metadata;
+	hello_metadata.file_size = 11;
+	hello_metadata.file_type = FileType::FILE_TYPE_REGULAR;
+	OpenDALReadHandle reader(fs, std::move(op), "memory://hello.txt", "hello.txt", FileFlags::FILE_FLAGS_READ,
+	                         hello_metadata, string());
 	REQUIRE(reader.Size() == 11);
 
 	char buffer[16] = {};
@@ -135,8 +139,12 @@ TEST_CASE("OpenDAL filesystem supports concurrent positional reads", "[opendalfs
 	const string contents = "abcdefghijklmnopqrstuvwxyz";
 	auto op = make_uniq<opendal::Operator>("memory");
 	op->Write("parallel.txt", contents);
+	FileMetadata parallel_metadata;
+	parallel_metadata.file_size = static_cast<int64_t>(contents.size());
+	parallel_metadata.file_type = FileType::FILE_TYPE_REGULAR;
 	OpenDALReadHandle reader(fs, std::move(op), "memory://parallel.txt", "parallel.txt",
-	                         FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS);
+	                         FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS, parallel_metadata,
+	                         string());
 
 	vector<string> results(8, string(3, '\0'));
 	vector<idx_t> read_sizes(8);
@@ -159,6 +167,8 @@ TEST_CASE("OpenDAL filesystem supports concurrent positional reads", "[opendalfs
 
 TEST_CASE("OpenDAL filesystem rejects invalid paths and closed handles", "[opendalfs]") {
 	OpenDALFileSystem fs;
+	REQUIRE(fs.OpenFile("memory://missing.txt",
+	                    FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_NULL_IF_NOT_EXISTS) == nullptr);
 	REQUIRE_THROWS(fs.OpenFile("missing.txt", FileFlags::FILE_FLAGS_READ));
 	REQUIRE_THROWS(fs.OpenFile("unknown://missing.txt", FileFlags::FILE_FLAGS_READ));
 	REQUIRE(!fs.FileExists("missing.txt"));

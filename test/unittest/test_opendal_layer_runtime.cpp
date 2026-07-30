@@ -1,4 +1,5 @@
 #include "catch/catch.hpp"
+#include "opendal_file_system.hpp"
 #include "opendal_layer_options.hpp"
 
 #include <atomic>
@@ -18,7 +19,7 @@ namespace {
 
 class MockHttpService {
 public:
-	enum class Mode { DELAY, RETRY_THEN_SUCCEED };
+	enum class Mode { DELAY, RETRY_THEN_SUCCEED, SUCCEED };
 
 	MockHttpService(Mode mode_p, idx_t expected_requests_p, std::chrono::milliseconds delay_p = {})
 	    : mode(mode_p), expected_requests(expected_requests_p), delay(delay_p) {
@@ -79,7 +80,7 @@ private:
 				std::this_thread::sleep_for(delay);
 			} else {
 				const char *response =
-				    current < expected_requests
+				    mode == Mode::RETRY_THEN_SUCCEED && current < expected_requests
 				        ? "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 				        : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 				send(client_fd, response, std::strlen(response), 0);
@@ -137,6 +138,17 @@ TEST_CASE("OpenDAL retry layer retries temporary service failures", "[opendalfs]
 	                     ToOpenDALOperatorOptions(layers.ToOperatorOptions()));
 	REQUIRE_NOTHROW(op.Stat("eventually-available.csv"));
 	REQUIRE(service.RequestCount() == 3);
+}
+
+TEST_CASE("OpenDAL read handles cache metadata after the first size lookup", "[opendalfs][layers]") {
+	MockHttpService service(MockHttpService::Mode::SUCCEED, 4);
+	OpenDALFileSystem fs;
+	auto handle = fs.OpenFile(service.Endpoint() + "/cached.csv", FileFlags::FILE_FLAGS_READ);
+
+	REQUIRE(handle->GetFileSize() == 0);
+	const auto requests_after_first_size = service.RequestCount();
+	REQUIRE(handle->GetFileSize() == 0);
+	REQUIRE(service.RequestCount() == requests_after_first_size);
 }
 
 TEST_CASE("OpenDAL layer options are only pushed when enabled", "[opendalfs][layers]") {
