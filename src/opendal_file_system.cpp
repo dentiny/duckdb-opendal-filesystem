@@ -31,6 +31,23 @@ idx_t ReadFromOpenDAL(opendal::Reader &reader_p, void *buffer_p, idx_t size_p) {
 	return total_read;
 }
 
+idx_t ReadAtFromOpenDAL(opendal::Reader &reader_p, void *buffer_p, idx_t size_p, idx_t offset_p) {
+	idx_t total_read = 0;
+	while (total_read < size_p) {
+		if (offset_p > NumericLimits<idx_t>::Maximum() - total_read) {
+			throw IOException("Read offset exceeds OpenDAL reader range");
+		}
+		const auto read_size = reader_p.ReadAt(static_cast<char *>(buffer_p) + total_read,
+		                                       static_cast<std::streamsize>(size_p - total_read),
+		                                       static_cast<uint64_t>(offset_p + total_read));
+		if (read_size <= 0) {
+			break;
+		}
+		total_read += static_cast<idx_t>(read_size);
+	}
+	return total_read;
+}
+
 std::vector<std::unique_ptr<opendal::OperatorOption>>
 ToOpenDALOperatorOptions(vector<unique_ptr<opendal::OperatorOption>> options_p) {
 	std::vector<std::unique_ptr<opendal::OperatorOption>> result;
@@ -455,17 +472,10 @@ idx_t OpenDALReadHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {
 		throw InvalidInputException("read buffer must not be null");
 	}
 
-	if (offset_p > static_cast<idx_t>(NumericLimits<std::streamoff>::Maximum())) {
-		throw IOException("Read offset exceeds OpenDAL reader range");
-	}
 	if (size_p > static_cast<idx_t>(NumericLimits<std::streamsize>::Maximum())) {
 		throw IOException("Read size exceeds OpenDAL reader range");
 	}
-	auto positional_reader = op->GetReader(path);
-	if (offset_p != 0) {
-		positional_reader.Seek(static_cast<std::streamoff>(offset_p), std::ios_base::beg);
-	}
-	return ReadFromOpenDAL(positional_reader, buffer_p, size_p);
+	return ReadAtFromOpenDAL(*reader, buffer_p, size_p, offset_p);
 }
 
 idx_t OpenDALReadHandle::Read(void *buffer_p, idx_t size_p) {
