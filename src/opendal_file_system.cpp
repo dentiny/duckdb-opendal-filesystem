@@ -99,7 +99,22 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 		throw IOException("OpenDAL object does not exist: %s", path_p);
 	}
 	if (options.read) {
-		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p);
+		const auto metadata = op->Stat(parsed_path.path);
+		FileMetadata file_metadata;
+		file_metadata.file_size = static_cast<int64_t>(metadata.ContentLength());
+		if (metadata.IsFile()) {
+			file_metadata.file_type = FileType::FILE_TYPE_REGULAR;
+		} else if (metadata.IsDir()) {
+			file_metadata.file_type = FileType::FILE_TYPE_DIR;
+		}
+		if (metadata.LastModified()) {
+			const auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
+			                        metadata.LastModified()->time_since_epoch())
+			                        .count();
+			file_metadata.last_modification_time = Timestamp::FromEpochMicroSeconds(micros);
+		}
+		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
+		                                    std::move(file_metadata), metadata.Etag().value_or(string()));
 	}
 	return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
 	                                     !exists || options.truncate);
@@ -151,19 +166,7 @@ bool OpenDALFileSystem::Trim(FileHandle &handle_p, idx_t offset_p, idx_t length_
 }
 
 FileMetadata OpenDALFileSystem::Stats(FileHandle &handle_p) {
-	auto &handle = handle_p.Cast<OpenDALFileHandle>();
-	const auto metadata = handle.op->Stat(handle.path);
-	FileMetadata result;
-	result.file_size = static_cast<int64_t>(metadata.ContentLength());
-	result.file_type = metadata.IsFile()  ? FileType::FILE_TYPE_REGULAR
-	                   : metadata.IsDir() ? FileType::FILE_TYPE_DIR
-	                                      : FileType::FILE_TYPE_INVALID;
-	if (metadata.LastModified()) {
-		const auto micros =
-		    std::chrono::duration_cast<std::chrono::microseconds>(metadata.LastModified()->time_since_epoch()).count();
-		result.last_modification_time = Timestamp::FromEpochMicroSeconds(micros);
-	}
-	return result;
+	return handle_p.Cast<OpenDALFileHandle>().Stats();
 }
 
 timestamp_t OpenDALFileSystem::GetLastModifiedTime(FileHandle &handle_p) {
@@ -171,9 +174,7 @@ timestamp_t OpenDALFileSystem::GetLastModifiedTime(FileHandle &handle_p) {
 }
 
 string OpenDALFileSystem::GetVersionTag(FileHandle &handle_p) {
-	auto &handle = handle_p.Cast<OpenDALFileHandle>();
-	const auto metadata = handle.op->Stat(handle.path);
-	return metadata.Etag().value_or(string());
+	return handle_p.Cast<OpenDALFileHandle>().VersionTag();
 }
 
 FileType OpenDALFileSystem::GetFileType(FileHandle &handle_p) {
@@ -391,7 +392,29 @@ void OpenDALFileHandle::EnsureOpen() const {
 
 idx_t OpenDALFileHandle::Size() const {
 	EnsureOpen();
-	return op->Stat(path).ContentLength();
+	return static_cast<idx_t>(Stats().file_size);
+}
+
+FileMetadata OpenDALFileHandle::Stats() const {
+	EnsureOpen();
+	const auto metadata = op->Stat(path);
+	FileMetadata result;
+	result.file_size = static_cast<int64_t>(metadata.ContentLength());
+	result.file_type = metadata.IsFile()  ? FileType::FILE_TYPE_REGULAR
+	                   : metadata.IsDir() ? FileType::FILE_TYPE_DIR
+	                                      : FileType::FILE_TYPE_INVALID;
+	if (metadata.LastModified()) {
+		const auto micros =
+		    std::chrono::duration_cast<std::chrono::microseconds>(metadata.LastModified()->time_since_epoch()).count();
+		result.last_modification_time = Timestamp::FromEpochMicroSeconds(micros);
+	}
+	return result;
+}
+
+string OpenDALFileHandle::VersionTag() const {
+	EnsureOpen();
+	const auto metadata = op->Stat(path);
+	return metadata.Etag().value_or(string());
 }
 
 void OpenDALFileHandle::Flush() {
@@ -403,9 +426,25 @@ void OpenDALFileHandle::Close() {
 }
 
 OpenDALReadHandle::OpenDALReadHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
-                                     string path_p, FileOpenFlags flags_p)
+                                     string path_p, FileOpenFlags flags_p, FileMetadata metadata_p,
+                                     string version_tag_p)
     : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p),
-      reader(make_uniq<opendal::Reader>(op->GetReader(path))) {
+      reader(make_uniq<opendal::Reader>(op->GetReader(path))), metadata(std::move(metadata_p)),
+      version_tag(std::move(version_tag_p)) {
+}
+
+idx_t OpenDALReadHandle::Size() const {
+	return static_cast<idx_t>(Stats().file_size);
+}
+
+FileMetadata OpenDALReadHandle::Stats() const {
+	EnsureOpen();
+	return metadata;
+}
+
+string OpenDALReadHandle::VersionTag() const {
+	EnsureOpen();
+	return version_tag;
 }
 
 idx_t OpenDALReadHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {

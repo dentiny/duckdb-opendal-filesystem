@@ -87,6 +87,8 @@ public:
 
 public:
 	virtual idx_t Size() const;
+	virtual FileMetadata Stats() const;
+	virtual string VersionTag() const;
 	virtual void Flush();
 	void Close() override;
 
@@ -102,8 +104,11 @@ protected:
 class OpenDALReadHandle : public OpenDALFileHandle {
 public:
 	OpenDALReadHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p, string path_p,
-	                  FileOpenFlags flags_p);
+	                  FileOpenFlags flags_p, FileMetadata metadata_p, string version_tag_p);
 
+	idx_t Size() const override;
+	FileMetadata Stats() const override;
+	string VersionTag() const override;
 	idx_t Read(void *buffer_p, idx_t size_p);
 	idx_t Read(void *buffer_p, idx_t size_p, idx_t offset_p);
 	void Seek(idx_t offset_p);
@@ -116,6 +121,8 @@ private:
 private:
 	unique_ptr<opendal::Reader> reader;
 	idx_t position = 0;
+	FileMetadata metadata;
+	string version_tag;
 };
 
 class OpenDALWriteHandle : public OpenDALFileHandle {
