@@ -29,8 +29,29 @@ registered filesystem.
 ## How to use extension
 
 ```sh
-FORCE INSTALL opendalfs FROM community;
-LOAD opendalfs;
+FORCE INSTALL duckdb_opendalfs FROM community;
+LOAD duckdb_opendalfs;
+```
+
+## Performance
+
+For high-throughput remote scans, use this extension together with the
+[`cache_httpfs` community extension](https://duckdb.org/community_extensions/extensions/cache_httpfs). The OpenDAL
+filesystem extension focuses on exposing many storage backends through DuckDB's filesystem API, while `cache_httpfs`
+provides the performance layer for remote reads, including:
+
+- in-memory and persistent data caching
+- file handle and metadata caching
+- block-aligned reads to avoid small I/O requests
+- parallel I/O operations
+
+Load `duckdb_opendalfs` first, then `cache_httpfs`, and explicitly register the OpenDAL filesystem with
+`cache_httpfs`:
+
+```sql
+LOAD duckdb_opendalfs;
+LOAD cache_httpfs;
+CALL cache_httpfs_wrap_cache_filesystem('duckdb_opendalfs');
 ```
 
 ## Secrets
