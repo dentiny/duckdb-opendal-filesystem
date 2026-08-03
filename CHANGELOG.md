@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1
+
+### Added
+
+- Implement batch deletion ([#45])
+
+[#45]: https://github.com/dentiny/duckdb-opendal-filesystem/pull/45
+
+### Updated
+
+- Update OpenDAL ([#45])
+
+[#45]: https://github.com/dentiny/duckdb-opendal-filesystem/pull/45
+
 ## 0.2.0
 
 ### Added
