@@ -30,6 +30,7 @@ set(OPENDAL_SERVICE_FEATURES
     services-dbfs
     services-dropbox
     services-ftp
+    services-fs
     services-gcs
     services-gdrive
     services-github
@@ -121,8 +122,12 @@ endif()
 
 add_library(
   duckdb_opendalfs_core STATIC
-  src/opendal_file_system.cpp src/opendal_layer_options.cpp
-  src/opendal_open_options.cpp src/opendal_path.cpp src/opendal_secret.cpp
+  src/opendal_file_system.cpp
+  src/opendal_layer_options.cpp
+  src/opendal_open_options.cpp
+  src/opendal_path.cpp
+  src/opendal_remove_utils.cpp
+  src/opendal_secret.cpp
   src/opendal_uri.cpp)
 target_compile_features(duckdb_opendalfs_core PRIVATE cxx_std_17)
 target_include_directories(duckdb_opendalfs_core PUBLIC src/include)

@@ -7,10 +7,10 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "opendal_path.hpp"
 #include "opendal_layer_options.hpp"
+#include "opendal_remove_utils.hpp"
 
 #include <opendal.hpp>
 
-#include <algorithm>
 #include <chrono>
 #include <string_view>
 #include <utility>
@@ -63,11 +63,9 @@ ToOpenDALOperatorOptions(vector<unique_ptr<opendal::OperatorOption>> options_p) 
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
 }
 
-unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &uri_p, OpenDALPath &parsed_path_p,
-                                                                optional_ptr<FileOpener> opener_p) const {
-	if (!OpenDALPath::TryParse(uri_p, parsed_path_p)) {
-		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", uri_p);
-	}
+unordered_map<string, string> OpenDALFileSystem::CreateOperatorConfig(const string &uri_p,
+                                                                      const OpenDALPath &parsed_path_p,
+                                                                      optional_ptr<FileOpener> opener_p) const {
 	auto result = config;
 	for (const auto &entry : parsed_path_p.uri_config) {
 		result[entry.first] = entry.second;
@@ -88,6 +86,15 @@ unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &ur
 			}
 		}
 	}
+	return result;
+}
+
+unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &uri_p, OpenDALPath &parsed_path_p,
+                                                                optional_ptr<FileOpener> opener_p) const {
+	if (!OpenDALPath::TryParse(uri_p, parsed_path_p)) {
+		throw InvalidInputException("Unsupported OpenDAL path prefix: %s", uri_p);
+	}
+	auto result = CreateOperatorConfig(uri_p, parsed_path_p, opener_p);
 	auto options = OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions();
 	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, ToOpenDALOperatorOptions(std::move(options)));
 }
@@ -125,9 +132,9 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 			file_metadata.file_type = FileType::FILE_TYPE_DIR;
 		}
 		if (metadata.LastModified()) {
-			const auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
-			                        metadata.LastModified()->time_since_epoch())
-			                        .count();
+			const auto micros =
+			    std::chrono::duration_cast<std::chrono::microseconds>(metadata.LastModified()->time_since_epoch())
+			        .count();
 			file_metadata.last_modification_time = Timestamp::FromEpochMicroSeconds(micros);
 		}
 		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
@@ -304,24 +311,16 @@ void OpenDALFileSystem::RemoveFile(const string &path_p, optional_ptr<FileOpener
 	op->Remove(parsed_path.path);
 }
 
-// TODO(hjiang): investigate batch deletion API.
 void OpenDALFileSystem::RemoveFiles(const vector<string> &paths_p, optional_ptr<FileOpener> opener_p) {
-	vector<OpenDALPath> paths;
-	paths.reserve(paths_p.size());
-	for (const auto &path_string : paths_p) {
-		OpenDALPath path;
-		if (!OpenDALPath::TryParse(path_string, path)) {
-			throw InvalidInputException("Unsupported OpenDAL path prefix: %s", path_string);
-		}
-		if (path.path.empty()) {
-			throw InvalidInputException("OpenDAL object path must not be empty");
-		}
-		paths.emplace_back(std::move(path));
-	}
-	for (idx_t index = 0; index < paths.size(); index++) {
-		auto &parsed_path = paths[index];
-		auto op = CreateOperator(paths_p[index], parsed_path, opener_p);
-		op->Remove(parsed_path.path);
+	auto groups = GroupOpenDALRemovePaths(paths_p, [&](const string &path_string, const OpenDALPath &path) {
+		return CreateOperatorConfig(path_string, path, opener_p);
+	});
+
+	for (const auto &group : groups) {
+		auto options = OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions();
+		auto op =
+		    make_uniq<opendal::Operator>(group.scheme, group.config, ToOpenDALOperatorOptions(std::move(options)));
+		op->RemoveAll(group.paths);
 	}
 }
 
