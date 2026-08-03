@@ -1,6 +1,8 @@
 #include "catch/catch.hpp"
 #include "opendal_file_system.hpp"
 #include "opendal_path.hpp"
+#include "opendal_remove_utils.hpp"
+#include "temporary_directory.hpp"
 
 #include <opendal.hpp>
 
@@ -20,6 +22,7 @@ TEST_CASE("OpenDAL filesystem handles registered prefixes only", "[opendalfs]") 
 	REQUIRE(!fs.IsPathAbsolute("hello.txt"));
 	REQUIRE(!fs.IsPathAbsolute("unknown://hello.txt"));
 	REQUIRE(fs.CanHandleFile("memory://hello.txt"));
+	REQUIRE(fs.CanHandleFile("fs://hello.txt"));
 	REQUIRE(fs.CanHandleFile("s3://bucket/key"));
 	REQUIRE(fs.CanHandleFile("https://example.com/file"));
 	REQUIRE(!fs.CanHandleFile("hello.txt"));
@@ -38,6 +41,7 @@ TEST_CASE("OpenDAL paths configure every registered storage backend", "[opendalf
 	};
 	const TestCase cases[] = {
 	    {"memory://file", "memory", "file", "", ""},
+	    {"fs://file", "fs", "file", "", ""},
 	    {"s3://bucket/file", "s3", "file", "bucket", "bucket"},
 	    {"s3a://bucket/file", "s3", "file", "bucket", "bucket"},
 	    {"s3n://bucket/file", "s3", "file", "bucket", "bucket"},
@@ -89,6 +93,26 @@ TEST_CASE("OpenDAL paths configure every registered storage backend", "[opendalf
 			REQUIRE(path.uri_config.at(test.config_key) == test.config_value);
 		}
 	}
+}
+
+TEST_CASE("OpenDAL remove paths are grouped by operator configuration", "[opendalfs]") {
+	auto config_provider = [](const string &, const OpenDALPath &path) {
+		return path.uri_config;
+	};
+	auto groups = GroupOpenDALRemovePaths(
+	    {"s3://first/a.parquet", "s3://second/b.parquet", "s3://first/c.parquet", "memory://x", "memory://y"},
+	    config_provider);
+
+	REQUIRE(groups.size() == 3);
+	REQUIRE(groups[0].scheme == "s3");
+	REQUIRE(groups[0].config.at("bucket") == "first");
+	REQUIRE(groups[0].paths == vector<string> {"a.parquet", "c.parquet"});
+	REQUIRE(groups[1].scheme == "s3");
+	REQUIRE(groups[1].config.at("bucket") == "second");
+	REQUIRE(groups[1].paths == vector<string> {"b.parquet"});
+	REQUIRE(groups[2].scheme == "memory");
+	REQUIRE(groups[2].config.empty());
+	REQUIRE(groups[2].paths == vector<string> {"x", "y"});
 }
 
 TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory backend", "[opendalfs][sequential]") {
@@ -196,6 +220,27 @@ TEST_CASE("OpenDAL filesystem removes objects from the memory backend", "[openda
 	REQUIRE_THROWS(fs.RemoveFile("removed.txt"));
 	REQUIRE_THROWS(fs.RemoveFile("unknown://removed.txt"));
 	REQUIRE_THROWS(fs.RemoveFile("memory://"));
+}
+
+TEST_CASE("OpenDAL filesystem batch remove deletes grouped objects", "[opendalfs]") {
+	TemporaryDirectory directory;
+	OpenDALFileSystem fs({{"root", directory.Path()}});
+
+	auto write_file = [&](const string &path, string contents) {
+		auto writer = fs.OpenFile(path, FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW);
+		writer->Write(contents.data(), contents.size());
+		writer->Close();
+	};
+
+	write_file("fs://first.txt", "first");
+	write_file("fs://second.txt", "second");
+	REQUIRE(fs.FileExists("fs://first.txt"));
+	REQUIRE(fs.FileExists("fs://second.txt"));
+
+	fs.RemoveFiles({"fs://first.txt", "fs://second.txt"});
+
+	REQUIRE(!fs.FileExists("fs://first.txt"));
+	REQUIRE(!fs.FileExists("fs://second.txt"));
 }
 
 TEST_CASE("OpenDAL filesystem creates and lists directories in the memory backend", "[opendalfs]") {

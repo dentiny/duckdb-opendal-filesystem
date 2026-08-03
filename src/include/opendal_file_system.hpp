@@ -70,6 +70,8 @@ public:
 	bool IsManuallySet() override;
 
 private:
+	unordered_map<string, string> CreateOperatorConfig(const string &uri_p, const OpenDALPath &parsed_path_p,
+	                                                   optional_ptr<FileOpener> opener_p) const;
 	unique_ptr<opendal::Operator> CreateOperator(const string &uri_p, OpenDALPath &parsed_path_p,
 	                                             optional_ptr<FileOpener> opener_p) const;
 	unordered_map<string, string> config;

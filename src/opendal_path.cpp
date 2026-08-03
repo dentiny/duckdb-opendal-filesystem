@@ -35,6 +35,7 @@ constexpr OpenDALPrefix OPENDAL_PREFIXES[] = {
     {"dbfs://", "dbfs", OpenDALSecretType::DBFS},
     {"dropbox://", "dropbox", OpenDALSecretType::DROPBOX},
     {"ftp://", "ftp", OpenDALSecretType::FTP},
+    {"fs://", "fs", OpenDALSecretType::NONE},
     {"gdrive://", "gdrive", OpenDALSecretType::GDRIVE},
     {"github://", "github", OpenDALSecretType::GITHUB},
     {"hf://", "hf", OpenDALSecretType::HF},
