@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Update DuckDB and extension-ci-tools to `v1.5.6`.
+
 ## 0.2.1
 
 ### Added
