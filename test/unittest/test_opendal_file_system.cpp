@@ -136,9 +136,12 @@ TEST_CASE("OpenDAL filesystem writes, gets file size, and reads from the memory 
 	FileMetadata hello_metadata;
 	hello_metadata.file_size = 11;
 	hello_metadata.file_type = FileType::FILE_TYPE_REGULAR;
+	hello_metadata.version_tag = "test-etag";
 	OpenDALReadHandle reader(fs, std::move(op), "memory://hello.txt", "hello.txt", FileFlags::FILE_FLAGS_READ,
-	                         hello_metadata, string());
+	                         hello_metadata);
 	REQUIRE(reader.Size() == 11);
+	REQUIRE(fs.GetVersionTag(reader) == "test-etag");
+	REQUIRE(fs.Stats(reader).version_tag == "test-etag");
 
 	char buffer[16] = {};
 	REQUIRE(reader.Read(buffer, 5) == 5);
@@ -167,8 +170,7 @@ TEST_CASE("OpenDAL filesystem supports concurrent positional reads", "[opendalfs
 	parallel_metadata.file_size = static_cast<int64_t>(contents.size());
 	parallel_metadata.file_type = FileType::FILE_TYPE_REGULAR;
 	OpenDALReadHandle reader(fs, std::move(op), "memory://parallel.txt", "parallel.txt",
-	                         FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS, parallel_metadata,
-	                         string());
+	                         FileFlags::FILE_FLAGS_READ | FileFlags::FILE_FLAGS_PARALLEL_ACCESS, parallel_metadata);
 
 	vector<string> results(8, string(3, '\0'));
 	vector<idx_t> read_sizes(8);

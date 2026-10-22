@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/unordered_map.hpp"
@@ -44,7 +45,7 @@ enum class OpenDALSecretType : uint8_t {
 	COUNT
 };
 
-const char *OpenDALSecretTypeName(OpenDALSecretType type_p);
+std::string_view OpenDALSecretTypeName(OpenDALSecretType type_p);
 
 struct OpenDALPath {
 	string scheme;

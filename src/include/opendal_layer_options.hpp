@@ -1,8 +1,8 @@
 #pragma once
 
 #include "duckdb/common/file_opener.hpp"
-#include "duckdb/common/unique_ptr.hpp"
-#include "duckdb/common/vector.hpp"
+#include <memory>
+#include <vector>
 
 #include "opendal_config.hpp"
 
@@ -12,7 +12,7 @@ namespace duckdb {
 
 struct OpenDALLayerOptions {
 	static OpenDALLayerOptions FromSettings(optional_ptr<FileOpener> opener_p);
-	vector<unique_ptr<opendal::OperatorOption>> ToOperatorOptions() const;
+	std::vector<std::unique_ptr<opendal::OperatorOption>> ToOperatorOptions() const;
 
 	bool timeout_layer_enabled = DEFAULT_OPENDAL_TIMEOUT_LAYER_ENABLED;
 	uint64_t timeout_ms = DEFAULT_TIMEOUT_MS;

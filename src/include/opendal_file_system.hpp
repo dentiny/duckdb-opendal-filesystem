@@ -74,7 +74,7 @@ private:
 	                                                   optional_ptr<FileOpener> opener_p) const;
 	unique_ptr<opendal::Operator> CreateOperator(const string &uri_p, OpenDALPath &parsed_path_p,
 	                                             optional_ptr<FileOpener> opener_p) const;
-	unordered_map<string, string> config;
+	const unordered_map<string, string> config;
 };
 
 class OpenDALFileHandle : public FileHandle {
@@ -106,11 +106,10 @@ protected:
 class OpenDALReadHandle : public OpenDALFileHandle {
 public:
 	OpenDALReadHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p, string path_p,
-	                  FileOpenFlags flags_p, FileMetadata metadata_p, string version_tag_p);
+	                  FileOpenFlags flags_p, FileMetadata metadata_p);
 
 	idx_t Size() const override;
 	FileMetadata Stats() const override;
-	string VersionTag() const override;
 	idx_t Read(void *buffer_p, idx_t size_p);
 	idx_t Read(void *buffer_p, idx_t size_p, idx_t offset_p);
 	void Seek(idx_t offset_p);
@@ -124,7 +123,6 @@ private:
 	unique_ptr<opendal::Reader> reader;
 	idx_t position = 0;
 	FileMetadata metadata;
-	string version_tag;
 };
 
 class OpenDALWriteHandle : public OpenDALFileHandle {

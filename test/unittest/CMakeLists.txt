@@ -13,7 +13,8 @@ target_compile_features(unittest_duckdb_opendalfs PRIVATE cxx_std_17)
 
 if(NOT WIN32
    AND NOT SUN
-   AND NOT ZOS)
+   AND NOT ZOS
+   AND NOT PREBUILT_BINARY)
   target_link_libraries(unittest_duckdb_opendalfs test_helpers duckdb
                         ${EXTENSION_NAME})
 else()

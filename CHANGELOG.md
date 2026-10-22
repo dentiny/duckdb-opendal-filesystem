@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+### Changed
+
+- Upgrade DuckDB to `v2.0.0` and extension-ci-tools to the latest commit.
+- Upgrade OpenDAL to upstream main commit `39f6bc7d91534b17e1c0182cb556aeab6cfd6742`.
+- Require C++17 throughout the extension and publish the `0.3.0` release metadata.
+- Use constexpr string views for global setting, description, service, and secret-name constants.
+- Adapt configuration and secret registration to DuckDB's Identifier APIs.
+- Reuse DuckDB metadata version tags and secret access helpers.
+- Pass OpenDAL's native option container directly, removing ownership-conversion adapters.
+- Update static registration and prebuilt-library unit-test linkage for DuckDB v2.
+
 ## 0.2.1
 
 ### Added
