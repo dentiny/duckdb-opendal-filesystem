@@ -2,6 +2,11 @@
 
 ## 0.3.0
 
+### Fixed
+
+- Check remote JSON results and native OpenDAL stat errors in inherited HTTPFS tests.
+- Exercise timeout/retry settings with HTTP reads instead of unrelated memory-backend writes.
+
 ### Changed
 
 - Upgrade DuckDB to `v2.0.0` and extension-ci-tools to the latest commit.

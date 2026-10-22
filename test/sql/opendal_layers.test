@@ -23,8 +23,10 @@ SET opendal_timeout_layer_enabled = false;
 statement ok
 SET opendal_retry_layer_enabled = false;
 
-statement ok
-COPY (SELECT 42 AS value) TO 'memory://disabled-layers.csv' (HEADER);
+query I
+SELECT count(*) FROM read_csv_auto('https://raw.githubusercontent.com/dentiny/duck-read-cache-fs/62191f711413bb3cf50257b60dd4b44b2de0e3a0/test/data/stock-exchanges.csv');
+----
+251
 
 statement ok
 SET opendal_timeout_layer_enabled = true;
@@ -33,10 +35,10 @@ statement ok
 SET opendal_retry_layer_enabled = true;
 
 statement ok
-SET opendal_timeout_ms = 2500;
+SET opendal_timeout_ms = 25000;
 
 statement ok
-SET opendal_io_timeout_ms = 500;
+SET opendal_io_timeout_ms = 5000;
 
 statement ok
 SET opendal_retry_max_times = 1;
@@ -53,8 +55,10 @@ SET opendal_retry_max_delay_ms = 20;
 statement ok
 SET opendal_retry_jitter = true;
 
-statement ok
-COPY (SELECT 42 AS value) TO 'memory://configured-layers.csv' (HEADER);
+query I
+SELECT count(*) FROM read_csv_auto('https://raw.githubusercontent.com/dentiny/duck-read-cache-fs/62191f711413bb3cf50257b60dd4b44b2de0e3a0/test/data/stock-exchanges.csv');
+----
+251
 
 query IIIIIRIII
 SELECT current_setting('opendal_timeout_layer_enabled'),
@@ -67,7 +71,7 @@ SELECT current_setting('opendal_timeout_layer_enabled'),
        current_setting('opendal_retry_max_delay_ms'),
        current_setting('opendal_retry_jitter');
 ----
-true	2500	500	true	1	1.5	10	20	true
+true	25000	5000	true	1	1.5	10	20	true
 
 statement error
 SET opendal_retry_factor = 0.5;
