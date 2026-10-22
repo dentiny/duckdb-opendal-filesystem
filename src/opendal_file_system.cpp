@@ -14,6 +14,7 @@
 #include <opendal.hpp>
 
 #include <chrono>
+#include <exception>
 #include <string_view>
 #include <utility>
 
@@ -108,7 +109,7 @@ unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &ur
 }
 
 unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpenFlags flags_p,
-                                                   optional_ptr<FileOpener> opener_p) {
+                                                   optional_ptr<FileOpener> opener_p) try {
 	OpenDALOpenOptions options(flags_p);
 	if (path_p.empty()) {
 		throw InvalidInputException("OpenDAL path must not be empty");
@@ -137,6 +138,10 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 	}
 	return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
 	                                     !exists || options.truncate);
+} catch (const Exception &) {
+	throw;
+} catch (const std::exception &error) {
+	throw IOException("OpenDAL failed to open '%s': %s", path_p, error.what());
 }
 
 bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener> opener_p) {

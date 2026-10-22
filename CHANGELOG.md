@@ -1,5 +1,11 @@
 # Changelog
 
+## Fixed
+
+- Report OpenDAL file-open failures as DuckDB I/O errors while preserving existing DuckDB exceptions.
+- Check backend-independent remote JSON results and I/O errors in inherited HTTPFS tests.
+- Exercise timeout/retry settings with HTTP reads instead of unrelated memory-backend writes.
+
 ## 0.3.0
 
 ### Changed
