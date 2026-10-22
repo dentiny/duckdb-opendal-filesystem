@@ -3,9 +3,11 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/limits.hpp"
+#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "opendal_path.hpp"
+#include "opendal_config.hpp"
 #include "opendal_layer_options.hpp"
 #include "opendal_remove_utils.hpp"
 
@@ -17,6 +19,22 @@
 
 namespace duckdb {
 namespace {
+
+FileMetadata ConvertMetadata(const opendal::Metadata &metadata_p) {
+	FileMetadata result;
+	result.file_size = NumericCast<int64_t>(metadata_p.ContentLength());
+	result.file_type = metadata_p.IsFile()  ? FileType::FILE_TYPE_REGULAR
+	                   : metadata_p.IsDir() ? FileType::FILE_TYPE_DIR
+	                                        : FileType::FILE_TYPE_INVALID;
+	if (metadata_p.LastModified()) {
+		const auto micros =
+		    std::chrono::duration_cast<std::chrono::microseconds>(metadata_p.LastModified()->time_since_epoch())
+		        .count();
+		result.last_modification_time = Timestamp::FromEpochMicroSeconds(micros);
+	}
+	result.version_tag = metadata_p.Etag().value_or(string());
+	return result;
+}
 
 idx_t ReadFromOpenDAL(opendal::Reader &reader_p, void *buffer_p, idx_t size_p) {
 	idx_t total_read = 0;
@@ -48,16 +66,6 @@ idx_t ReadAtFromOpenDAL(opendal::Reader &reader_p, void *buffer_p, idx_t size_p,
 	return total_read;
 }
 
-std::vector<std::unique_ptr<opendal::OperatorOption>>
-ToOpenDALOperatorOptions(vector<unique_ptr<opendal::OperatorOption>> options_p) {
-	std::vector<std::unique_ptr<opendal::OperatorOption>> result;
-	result.reserve(options_p.size());
-	for (auto &option : options_p) {
-		result.push_back(std::unique_ptr<opendal::OperatorOption>(option.release()));
-	}
-	return result;
-}
-
 } // namespace
 
 OpenDALFileSystem::OpenDALFileSystem(const unordered_map<string, string> &config_p) : config(config_p) {
@@ -74,11 +82,11 @@ unordered_map<string, string> OpenDALFileSystem::CreateOperatorConfig(const stri
 	auto transaction = FileOpener::TryGetCatalogTransaction(opener_p);
 	if (secret_manager && transaction && parsed_path_p.secret_type != OpenDALSecretType::NONE) {
 		auto secret_match =
-		    secret_manager->LookupSecret(*transaction, uri_p, OpenDALSecretTypeName(parsed_path_p.secret_type));
+		    secret_manager->LookupSecret(*transaction, uri_p, string(OpenDALSecretTypeName(parsed_path_p.secret_type)));
 		if (secret_match.HasMatch()) {
-			const auto &secret = dynamic_cast<const KeyValueSecret &>(*secret_match.secret_entry->secret);
+			const auto &secret = secret_match.GetSecret().Cast<KeyValueSecret>();
 			for (const auto &entry : secret.secret_map) {
-				auto key = entry.first;
+				auto key = entry.first.GetIdentifierName();
 				if (key == "bearer_token") {
 					key = "token";
 				}
@@ -96,7 +104,7 @@ unique_ptr<opendal::Operator> OpenDALFileSystem::CreateOperator(const string &ur
 	}
 	auto result = CreateOperatorConfig(uri_p, parsed_path_p, opener_p);
 	auto options = OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions();
-	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, ToOpenDALOperatorOptions(std::move(options)));
+	return make_uniq<opendal::Operator>(parsed_path_p.scheme, result, std::move(options));
 }
 
 unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpenFlags flags_p,
@@ -124,21 +132,8 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 	}
 	if (options.read) {
 		const auto metadata = op->Stat(parsed_path.path);
-		FileMetadata file_metadata;
-		file_metadata.file_size = static_cast<int64_t>(metadata.ContentLength());
-		if (metadata.IsFile()) {
-			file_metadata.file_type = FileType::FILE_TYPE_REGULAR;
-		} else if (metadata.IsDir()) {
-			file_metadata.file_type = FileType::FILE_TYPE_DIR;
-		}
-		if (metadata.LastModified()) {
-			const auto micros =
-			    std::chrono::duration_cast<std::chrono::microseconds>(metadata.LastModified()->time_since_epoch())
-			        .count();
-			file_metadata.last_modification_time = Timestamp::FromEpochMicroSeconds(micros);
-		}
 		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
-		                                    std::move(file_metadata), metadata.Etag().value_or(string()));
+		                                    ConvertMetadata(metadata));
 	}
 	return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
 	                                     !exists || options.truncate);
@@ -318,8 +313,7 @@ void OpenDALFileSystem::RemoveFiles(const vector<string> &paths_p, optional_ptr<
 
 	for (const auto &group : groups) {
 		auto options = OpenDALLayerOptions::FromSettings(opener_p).ToOperatorOptions();
-		auto op =
-		    make_uniq<opendal::Operator>(group.scheme, group.config, ToOpenDALOperatorOptions(std::move(options)));
+		auto op = make_uniq<opendal::Operator>(group.scheme, group.config, std::move(options));
 		op->RemoveAll(group.paths);
 	}
 }
@@ -352,7 +346,7 @@ bool OpenDALFileSystem::IsLocalFileSystem() const {
 }
 
 string OpenDALFileSystem::GetName() const {
-	return "duckdb_opendalfs";
+	return string(OPENDALFS_EXTENSION_NAME);
 }
 
 string OpenDALFileSystem::GetHomeDirectory() {
@@ -413,24 +407,11 @@ idx_t OpenDALFileHandle::Size() const {
 
 FileMetadata OpenDALFileHandle::Stats() const {
 	EnsureOpen();
-	const auto metadata = op->Stat(path);
-	FileMetadata result;
-	result.file_size = static_cast<int64_t>(metadata.ContentLength());
-	result.file_type = metadata.IsFile()  ? FileType::FILE_TYPE_REGULAR
-	                   : metadata.IsDir() ? FileType::FILE_TYPE_DIR
-	                                      : FileType::FILE_TYPE_INVALID;
-	if (metadata.LastModified()) {
-		const auto micros =
-		    std::chrono::duration_cast<std::chrono::microseconds>(metadata.LastModified()->time_since_epoch()).count();
-		result.last_modification_time = Timestamp::FromEpochMicroSeconds(micros);
-	}
-	return result;
+	return ConvertMetadata(op->Stat(path));
 }
 
 string OpenDALFileHandle::VersionTag() const {
-	EnsureOpen();
-	const auto metadata = op->Stat(path);
-	return metadata.Etag().value_or(string());
+	return Stats().version_tag;
 }
 
 void OpenDALFileHandle::Flush() {
@@ -442,11 +423,9 @@ void OpenDALFileHandle::Close() {
 }
 
 OpenDALReadHandle::OpenDALReadHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
-                                     string path_p, FileOpenFlags flags_p, FileMetadata metadata_p,
-                                     string version_tag_p)
+                                     string path_p, FileOpenFlags flags_p, FileMetadata metadata_p)
     : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p),
-      reader(make_uniq<opendal::Reader>(op->GetReader(path))), metadata(std::move(metadata_p)),
-      version_tag(std::move(version_tag_p)) {
+      reader(make_uniq<opendal::Reader>(op->GetReader(path))), metadata(std::move(metadata_p)) {
 }
 
 idx_t OpenDALReadHandle::Size() const {
@@ -456,11 +435,6 @@ idx_t OpenDALReadHandle::Size() const {
 FileMetadata OpenDALReadHandle::Stats() const {
 	EnsureOpen();
 	return metadata;
-}
-
-string OpenDALReadHandle::VersionTag() const {
-	EnsureOpen();
-	return version_tag;
 }
 
 idx_t OpenDALReadHandle::ReadAt(void *buffer_p, idx_t size_p, idx_t offset_p) {

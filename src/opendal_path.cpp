@@ -1,8 +1,7 @@
 #include "opendal_path.hpp"
 #include "opendal_uri.hpp"
 
-#include "duckdb/common/string_util.hpp"
-
+#include <iterator>
 #include <string_view>
 
 namespace duckdb {
@@ -58,7 +57,7 @@ constexpr OpenDALPrefix OPENDAL_PREFIXES[] = {
     {"yandex-disk://", "yandex-disk", OpenDALSecretType::YANDEX_DISK},
 };
 
-constexpr const char *OPENDAL_SECRET_TYPE_NAMES[] = {
+constexpr std::string_view OPENDAL_SECRET_TYPE_NAMES[] = {
     "",
     "http",
     "opendal_aliyun_drive",
@@ -94,12 +93,11 @@ constexpr const char *OPENDAL_SECRET_TYPE_NAMES[] = {
     "opendal_yandex_disk",
 };
 
-static_assert(sizeof(OPENDAL_SECRET_TYPE_NAMES) / sizeof(OPENDAL_SECRET_TYPE_NAMES[0]) ==
-              static_cast<idx_t>(OpenDALSecretType::COUNT));
+static_assert(std::size(OPENDAL_SECRET_TYPE_NAMES) == static_cast<idx_t>(OpenDALSecretType::COUNT));
 
 } // namespace
 
-const char *OpenDALSecretTypeName(OpenDALSecretType type_p) {
+std::string_view OpenDALSecretTypeName(OpenDALSecretType type_p) {
 	const auto index = static_cast<idx_t>(type_p);
 	if (index >= static_cast<idx_t>(OpenDALSecretType::COUNT)) {
 		return "";
@@ -109,10 +107,10 @@ const char *OpenDALSecretTypeName(OpenDALSecretType type_p) {
 
 bool OpenDALPath::TryParse(const string &path_p, OpenDALPath &result_p) {
 	for (const auto &entry : OPENDAL_PREFIXES) {
-		if (!StringUtil::StartsWith(path_p, string(entry.prefix))) {
+		if (std::string_view(path_p).substr(0, entry.prefix.size()) != entry.prefix) {
 			continue;
 		}
-		result_p.scheme.assign(entry.scheme.data(), entry.scheme.size());
+		result_p.scheme = entry.scheme;
 		result_p.secret_type = entry.secret_type;
 		result_p.uri_config.clear();
 		const auto uri = OpenDALUri::Parse(path_p, entry.prefix.size());

@@ -8,6 +8,9 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 include_directories(src/include)
 
 # Build the synchronous OpenDAL C++ binding from the pinned submodule.
@@ -129,7 +132,7 @@ add_library(
   src/opendal_remove_utils.cpp
   src/opendal_secret.cpp
   src/opendal_uri.cpp)
-target_compile_features(duckdb_opendalfs_core PRIVATE cxx_std_17)
+target_compile_features(duckdb_opendalfs_core PUBLIC cxx_std_17)
 target_include_directories(duckdb_opendalfs_core PUBLIC src/include)
 target_link_libraries(duckdb_opendalfs_core PUBLIC opendal_cpp)
 
@@ -137,12 +140,6 @@ set(EXTENSION_SOURCES src/duckdb_opendalfs_extension.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
-
-# OpenDAL's public C++ headers use std::optional and require C++17. DuckDB may
-# establish an older default before loading an extension's CMake file, so set
-# the requirement on the actual extension targets as well.
-target_compile_features(${EXTENSION_NAME} PRIVATE cxx_std_17)
-target_compile_features(${LOADABLE_EXTENSION_NAME} PRIVATE cxx_std_17)
 
 # Both extension variants must carry OpenDAL: DuckDB's static extension build
 # and the separately loadable .duckdb_extension artifact.

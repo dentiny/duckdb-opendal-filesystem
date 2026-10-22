@@ -3,13 +3,10 @@
 #include "duckdb_opendalfs_extension.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/opener_file_system.hpp"
-#include "duckdb/function/scalar_function.hpp"
 #include "opendal_file_system.hpp"
 #include "opendal_config.hpp"
 #include "opendal_layer_options.hpp"
 #include "opendal_secret.hpp"
-#include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 #include <cmath>
 #include <limits>
@@ -20,7 +17,7 @@ namespace {
 
 constexpr uint64_t MAX_OPENDAL_LAYER_MILLISECONDS = std::numeric_limits<uint64_t>::max() / 1000000;
 
-void ValidatePositiveMilliseconds(const char *name_p, const Value &parameter_p) {
+void ValidatePositiveMilliseconds(const Identifier &name_p, const Value &parameter_p) {
 	const auto value = parameter_p.GetValue<uint64_t>();
 	if (value == 0) {
 		throw InvalidInputException("%s must be greater than zero", name_p);
@@ -31,11 +28,11 @@ void ValidatePositiveMilliseconds(const char *name_p, const Value &parameter_p) 
 }
 
 void ValidateTimeout(ClientContext &, SetScope, Value &parameter_p) {
-	ValidatePositiveMilliseconds(OPENDAL_TIMEOUT, parameter_p);
+	ValidatePositiveMilliseconds(Identifier(OPENDAL_TIMEOUT), parameter_p);
 }
 
 void ValidateIOTimeout(ClientContext &, SetScope, Value &parameter_p) {
-	ValidatePositiveMilliseconds(OPENDAL_IO_TIMEOUT, parameter_p);
+	ValidatePositiveMilliseconds(Identifier(OPENDAL_IO_TIMEOUT), parameter_p);
 }
 
 void ValidateRetryMaxTimes(ClientContext &, SetScope, Value &parameter_p) {
@@ -55,21 +52,12 @@ void ValidateRetryFactor(ClientContext &, SetScope, Value &parameter_p) {
 	}
 }
 
-template <class T>
-T GetCurrentSetting(ClientContext &context_p, const char *name_p, T default_p) {
-	Value current_value;
-	if (context_p.TryGetCurrentSetting(name_p, current_value)) {
-		return current_value.GetValue<T>();
-	}
-	return default_p;
+void ValidateRetryMinDelay(ClientContext &, SetScope, Value &parameter_p) {
+	ValidatePositiveMilliseconds(Identifier(OPENDAL_RETRY_MIN_DELAY), parameter_p);
 }
 
-void ValidateRetryMinDelay(ClientContext &context_p, SetScope, Value &parameter_p) {
-	ValidatePositiveMilliseconds(OPENDAL_RETRY_MIN_DELAY, parameter_p);
-}
-
-void ValidateRetryMaxDelay(ClientContext &context_p, SetScope, Value &parameter_p) {
-	ValidatePositiveMilliseconds(OPENDAL_RETRY_MAX_DELAY, parameter_p);
+void ValidateRetryMaxDelay(ClientContext &, SetScope, Value &parameter_p) {
+	ValidatePositiveMilliseconds(Identifier(OPENDAL_RETRY_MAX_DELAY), parameter_p);
 }
 
 void LoadInternal(ExtensionLoader &loader) {
@@ -79,29 +67,28 @@ void LoadInternal(ExtensionLoader &loader) {
 	auto &config = DBConfig::GetConfig(instance);
 
 	// Timeout layer settings.
-	config.AddExtensionOption(OPENDAL_TIMEOUT_LAYER_ENABLED, OPENDAL_TIMEOUT_LAYER_ENABLED_DESCRIPTION,
-	                          LogicalType::BOOLEAN, Value::BOOLEAN(DEFAULT_OPENDAL_TIMEOUT_LAYER_ENABLED));
-	config.AddExtensionOption(OPENDAL_TIMEOUT, OPENDAL_TIMEOUT_DESCRIPTION, LogicalType::UBIGINT,
+	config.AddExtensionOption(Identifier(OPENDAL_TIMEOUT_LAYER_ENABLED),
+	                          string(OPENDAL_TIMEOUT_LAYER_ENABLED_DESCRIPTION), LogicalType::BOOLEAN,
+	                          Value::BOOLEAN(DEFAULT_OPENDAL_TIMEOUT_LAYER_ENABLED));
+	config.AddExtensionOption(Identifier(OPENDAL_TIMEOUT), string(OPENDAL_TIMEOUT_DESCRIPTION), LogicalType::UBIGINT,
 	                          Value::UBIGINT(DEFAULT_TIMEOUT_MS), ValidateTimeout);
-	config.AddExtensionOption(OPENDAL_IO_TIMEOUT, OPENDAL_IO_TIMEOUT_DESCRIPTION, LogicalType::UBIGINT,
-	                          Value::UBIGINT(DEFAULT_IO_TIMEOUT_MS), ValidateIOTimeout);
+	config.AddExtensionOption(Identifier(OPENDAL_IO_TIMEOUT), string(OPENDAL_IO_TIMEOUT_DESCRIPTION),
+	                          LogicalType::UBIGINT, Value::UBIGINT(DEFAULT_IO_TIMEOUT_MS), ValidateIOTimeout);
 
 	// Retry layer settings.
-	config.AddExtensionOption(OPENDAL_RETRY_LAYER_ENABLED, OPENDAL_RETRY_LAYER_ENABLED_DESCRIPTION,
+	config.AddExtensionOption(Identifier(OPENDAL_RETRY_LAYER_ENABLED), string(OPENDAL_RETRY_LAYER_ENABLED_DESCRIPTION),
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(DEFAULT_OPENDAL_RETRY_LAYER_ENABLED));
-	config.AddExtensionOption(OPENDAL_RETRY_MAX_TIMES, OPENDAL_RETRY_MAX_TIMES_DESCRIPTION, LogicalType::UBIGINT,
-	                          Value::UBIGINT(DEFAULT_RETRY_MAX_TIMES), ValidateRetryMaxTimes);
-	config.AddExtensionOption(OPENDAL_RETRY_FACTOR, OPENDAL_RETRY_FACTOR_DESCRIPTION, LogicalType::DOUBLE,
-	                          Value::DOUBLE(DEFAULT_RETRY_FACTOR), ValidateRetryFactor);
-	config.AddExtensionOption(OPENDAL_RETRY_MIN_DELAY, OPENDAL_RETRY_MIN_DELAY_DESCRIPTION, LogicalType::UBIGINT,
-	                          Value::UBIGINT(DEFAULT_RETRY_MIN_DELAY_MS), ValidateRetryMinDelay);
-	config.AddExtensionOption(OPENDAL_RETRY_MAX_DELAY, OPENDAL_RETRY_MAX_DELAY_DESCRIPTION, LogicalType::UBIGINT,
-	                          Value::UBIGINT(DEFAULT_RETRY_MAX_DELAY_MS), ValidateRetryMaxDelay);
-	config.AddExtensionOption(OPENDAL_RETRY_JITTER, OPENDAL_RETRY_JITTER_DESCRIPTION, LogicalType::BOOLEAN,
-	                          Value::BOOLEAN(DEFAULT_RETRY_JITTER));
-	auto &opener_filesystem = instance.GetFileSystem().Cast<OpenerFileSystem>();
-	auto &vfs = opener_filesystem.GetFileSystem();
-	vfs.RegisterSubSystem(make_uniq<OpenDALFileSystem>());
+	config.AddExtensionOption(Identifier(OPENDAL_RETRY_MAX_TIMES), string(OPENDAL_RETRY_MAX_TIMES_DESCRIPTION),
+	                          LogicalType::UBIGINT, Value::UBIGINT(DEFAULT_RETRY_MAX_TIMES), ValidateRetryMaxTimes);
+	config.AddExtensionOption(Identifier(OPENDAL_RETRY_FACTOR), string(OPENDAL_RETRY_FACTOR_DESCRIPTION),
+	                          LogicalType::DOUBLE, Value::DOUBLE(DEFAULT_RETRY_FACTOR), ValidateRetryFactor);
+	config.AddExtensionOption(Identifier(OPENDAL_RETRY_MIN_DELAY), string(OPENDAL_RETRY_MIN_DELAY_DESCRIPTION),
+	                          LogicalType::UBIGINT, Value::UBIGINT(DEFAULT_RETRY_MIN_DELAY_MS), ValidateRetryMinDelay);
+	config.AddExtensionOption(Identifier(OPENDAL_RETRY_MAX_DELAY), string(OPENDAL_RETRY_MAX_DELAY_DESCRIPTION),
+	                          LogicalType::UBIGINT, Value::UBIGINT(DEFAULT_RETRY_MAX_DELAY_MS), ValidateRetryMaxDelay);
+	config.AddExtensionOption(Identifier(OPENDAL_RETRY_JITTER), string(OPENDAL_RETRY_JITTER_DESCRIPTION),
+	                          LogicalType::BOOLEAN, Value::BOOLEAN(DEFAULT_RETRY_JITTER));
+	instance.GetFileSystem().RegisterSubSystem(make_uniq<OpenDALFileSystem>());
 }
 } // namespace
 
@@ -109,7 +96,7 @@ void DuckdbOpendalfsExtension::Load(ExtensionLoader &loader) {
 	LoadInternal(loader);
 }
 std::string DuckdbOpendalfsExtension::Name() {
-	return "duckdb_opendalfs";
+	return string(OPENDALFS_EXTENSION_NAME);
 }
 
 std::string DuckdbOpendalfsExtension::Version() const {
