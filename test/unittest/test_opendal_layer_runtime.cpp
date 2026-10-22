@@ -1,6 +1,5 @@
 #include "catch/catch.hpp"
 #include "opendal_file_system.hpp"
-#include "duckdb/common/exception.hpp"
 #include "opendal_layer_options.hpp"
 
 #include <atomic>
@@ -20,7 +19,7 @@ namespace {
 
 class MockHttpService {
 public:
-	enum class Mode { DELAY, RETRY_THEN_SUCCEED, SUCCEED, BAD_REQUEST };
+	enum class Mode { DELAY, RETRY_THEN_SUCCEED, SUCCEED };
 
 	MockHttpService(Mode mode_p, idx_t expected_requests_p, std::chrono::milliseconds delay_p = {})
 	    : mode(mode_p), expected_requests(expected_requests_p), delay(delay_p) {
@@ -81,9 +80,7 @@ private:
 				std::this_thread::sleep_for(delay);
 			} else {
 				const char *response =
-				    mode == Mode::BAD_REQUEST
-				        ? "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-				    : mode == Mode::RETRY_THEN_SUCCEED && current < expected_requests
+				    mode == Mode::RETRY_THEN_SUCCEED && current < expected_requests
 				        ? "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 				        : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 				send(client_fd, response, std::strlen(response), 0);
@@ -115,13 +112,6 @@ TEST_CASE("OpenDAL timeout layer stops a stalled service request", "[opendalfs][
 	const auto elapsed = std::chrono::steady_clock::now() - started;
 	REQUIRE(service.RequestCount() == 1);
 	REQUIRE(elapsed < std::chrono::milliseconds(300));
-}
-
-TEST_CASE("OpenDAL open failures use DuckDB IO exceptions", "[opendalfs][layers]") {
-	MockHttpService service(MockHttpService::Mode::BAD_REQUEST, 1);
-	OpenDALFileSystem fs;
-	REQUIRE_THROWS_AS(fs.OpenFile(service.Endpoint() + "/invalid.csv", FileFlags::FILE_FLAGS_READ), IOException);
-	REQUIRE_THROWS_AS(fs.OpenFile("", FileFlags::FILE_FLAGS_READ), InvalidInputException);
 }
 
 TEST_CASE("OpenDAL retry layer retries temporary service failures", "[opendalfs][layers]") {

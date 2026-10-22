@@ -14,7 +14,6 @@
 #include <opendal.hpp>
 
 #include <chrono>
-#include <exception>
 #include <string_view>
 #include <utility>
 
@@ -118,32 +117,26 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 		throw InvalidInputException("Invalid OpenDAL file open options");
 	}
 
-	try {
-		OpenDALPath parsed_path;
-		auto op = CreateOperator(path_p, parsed_path, opener_p);
-		if (parsed_path.path.empty()) {
-			throw InvalidInputException("OpenDAL object path must not be empty");
-		}
-
-		const bool exists = op->Exists(parsed_path.path);
-		if (!exists && !options.create) {
-			if (flags_p.ReturnNullIfNotExists()) {
-				return nullptr;
-			}
-			throw IOException("OpenDAL object does not exist: %s", path_p);
-		}
-		if (options.read) {
-			const auto metadata = op->Stat(parsed_path.path);
-			return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
-			                                    ConvertMetadata(metadata));
-		}
-		return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
-		                                     !exists || options.truncate);
-	} catch (const Exception &) {
-		throw;
-	} catch (const std::exception &error) {
-		throw IOException("OpenDAL failed to open '%s': %s", path_p, error.what());
+	OpenDALPath parsed_path;
+	auto op = CreateOperator(path_p, parsed_path, opener_p);
+	if (parsed_path.path.empty()) {
+		throw InvalidInputException("OpenDAL object path must not be empty");
 	}
+
+	const bool exists = op->Exists(parsed_path.path);
+	if (!exists && !options.create) {
+		if (flags_p.ReturnNullIfNotExists()) {
+			return nullptr;
+		}
+		throw IOException("OpenDAL object does not exist: %s", path_p);
+	}
+	if (options.read) {
+		const auto metadata = op->Stat(parsed_path.path);
+		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
+		                                    ConvertMetadata(metadata));
+	}
+	return make_uniq<OpenDALWriteHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
+	                                     !exists || options.truncate);
 }
 
 bool OpenDALFileSystem::FileExists(const string &path_p, optional_ptr<FileOpener> opener_p) {
