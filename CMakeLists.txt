@@ -150,11 +150,13 @@ if(MINGW OR WIN32)
   target_link_libraries(${LOADABLE_EXTENSION_NAME} userenv ws2_32 bcrypt)
 endif()
 if(APPLE)
-  # Cargo's security-framework crates are embedded in the Rust static archive;
-  # their native dependencies must be forwarded to every final consumer.
+  # Cargo's security-framework and sysinfo crates are embedded in the Rust
+  # static archive; forward their native dependencies to every final consumer.
   target_link_libraries(
-    opendal_cpp PUBLIC "-framework CoreFoundation" "-framework IOKit"
-                       "-framework Security" "-framework SystemConfiguration")
+    opendal_cpp
+    PUBLIC "-framework CoreFoundation" "-framework IOKit"
+           "-framework OpenDirectory" "-framework Security"
+           "-framework SystemConfiguration")
 endif()
 
 install(
