@@ -10,15 +10,36 @@
 #include "opendal_config.hpp"
 #include "opendal_layer_options.hpp"
 #include "opendal_remove_utils.hpp"
+#include "duckdb/common/string_util.hpp"
+#include "duckdb/function/scalar/string_common.hpp"
 
 #include <opendal.hpp>
 
 #include <chrono>
 #include <string_view>
 #include <utility>
+#include <set>
 
 namespace duckdb {
 namespace {
+
+string DecodeGlobPattern(const string &pattern_p) {
+	string result;
+	for (idx_t index = 0; index < pattern_p.size(); index++) {
+		if (pattern_p[index] == '%' && index + 2 < pattern_p.size()) {
+			const auto decoded = StringUtil::URLDecode(pattern_p.substr(index, 3));
+			// Percent-encoded metacharacters name literal object-key bytes.
+			if (decoded.size() == 1 && string("*?[]\\").find(decoded[0]) != string::npos) {
+				result += '\\';
+			}
+			result += decoded;
+			index += 2;
+		} else {
+			result += pattern_p[index];
+		}
+	}
+	return result;
+}
 
 FileMetadata ConvertMetadata(const opendal::Metadata &metadata_p) {
 	FileMetadata result;
@@ -123,6 +144,13 @@ unique_ptr<FileHandle> OpenDALFileSystem::OpenFile(const string &path_p, FileOpe
 		throw InvalidInputException("OpenDAL object path must not be empty");
 	}
 
+	// Ordinary reads need only one stat. Preserve the explicit missing-file
+	// probe for NULL_IF_NOT_EXISTS until the binding exposes typed errors.
+	if (options.read && !flags_p.ReturnNullIfNotExists()) {
+		const auto metadata = op->Stat(parsed_path.path);
+		return make_uniq<OpenDALReadHandle>(*this, std::move(op), path_p, std::move(parsed_path.path), flags_p,
+		                                    ConvertMetadata(metadata));
+	}
 	const bool exists = op->Exists(parsed_path.path);
 	if (!exists && !options.create) {
 		if (flags_p.ReturnNullIfNotExists()) {
@@ -371,10 +399,83 @@ vector<OpenFileInfo> OpenDALFileSystem::Glob(const string &path_p, FileOpener *o
 	const bool is_http = OpenDALPath::TryParse(path_p, path) && path.scheme == "http";
 	const bool has_glob =
 	    is_http ? path_p.find('*') != string::npos || path_p.find('[') != string::npos : HasGlob(path_p);
-	if (has_glob) {
-		throw InvalidInputException("Globs (`*`) for generic OpenDAL files are not supported");
+	if (!has_glob) {
+		return {OpenFileInfo(path_p)};
 	}
-	return {OpenFileInfo(path_p)};
+	if (is_http) {
+		throw InvalidInputException("Globs for HTTP OpenDAL files are not supported");
+	}
+	auto op = CreateOperator(path_p, path, opener_p);
+	for (const auto &entry : path.uri_config) {
+		if (HasGlob(entry.second)) {
+			throw InvalidInputException("Globs in OpenDAL storage configuration are not supported");
+		}
+	}
+	const auto raw_glob = path_p.find_first_of("*?[");
+	if (raw_glob == string::npos) {
+		throw InvalidInputException("OpenDAL glob must occur in the object path");
+	}
+	const auto uri_slash = path_p.rfind('/', raw_glob);
+	const auto uri_prefix = path_p.substr(0, uri_slash + 1);
+	OpenDALPath prefix_path;
+	if (!OpenDALPath::TryParse(uri_prefix, prefix_path)) {
+		throw InvalidInputException("Invalid OpenDAL glob prefix");
+	}
+	const auto &prefix = prefix_path.path;
+	const bool directories_only = path_p.back() == '/';
+	const auto pattern_path = DecodeGlobPattern(
+	    path_p.substr(uri_prefix.size(), path_p.size() - uri_prefix.size() - (directories_only ? 1 : 0)));
+	const auto parts = StringUtil::Split(pattern_path, '/');
+	const auto part_count = parts.size();
+	struct GlobDirectory {
+		string prefix;
+		idx_t part;
+	};
+	vector<GlobDirectory> pending {{prefix, 0}};
+	std::set<std::pair<string, idx_t>> visited;
+	std::set<string> matches;
+	while (!pending.empty()) {
+		auto current = std::move(pending.back());
+		pending.pop_back();
+		if (!visited.emplace(current.prefix, current.part).second || current.part >= part_count) {
+			continue;
+		}
+		const auto &pattern = parts[current.part];
+		const bool recursive = pattern == "**";
+		const bool last = current.part + 1 == part_count;
+		if (recursive && !last) {
+			pending.push_back({current.prefix, current.part + 1});
+		}
+		auto lister = op->GetLister(current.prefix);
+		while (auto entry = lister.Next()) {
+			const auto &key = entry->path;
+			// Only descend into immediate children; skip self entries from
+			// backends that include the directory itself in their listing.
+			if (key.size() <= current.prefix.size() || !StringUtil::StartsWith(key, current.prefix)) {
+				continue;
+			}
+			const bool directory = key.back() == '/';
+			const auto name =
+			    key.substr(current.prefix.size(), key.size() - current.prefix.size() - (directory ? 1 : 0));
+			if (name.empty() || name.find('/') != string::npos) {
+				continue;
+			}
+			if (!recursive && !duckdb::Glob(name.c_str(), name.size(), pattern.c_str(), pattern.size())) {
+				continue;
+			}
+			if (last && directory == directories_only) {
+				matches.insert(uri_prefix + StringUtil::URLEncode(key.substr(prefix.size()), false));
+			}
+			if (directory && (recursive || !last)) {
+				pending.push_back({key, recursive ? current.part : current.part + 1});
+			}
+		}
+	}
+	vector<OpenFileInfo> result;
+	for (const auto &match : matches) {
+		result.emplace_back(match);
+	}
+	return result;
 }
 
 bool OpenDALFileSystem::OnDiskFile(FileHandle &handle_p) {
@@ -425,7 +526,16 @@ void OpenDALFileHandle::Close() {
 OpenDALReadHandle::OpenDALReadHandle(OpenDALFileSystem &fs_p, unique_ptr<opendal::Operator> op_p, string full_path_p,
                                      string path_p, FileOpenFlags flags_p, FileMetadata metadata_p)
     : OpenDALFileHandle(fs_p, std::move(op_p), std::move(full_path_p), std::move(path_p), flags_p),
-      reader(make_uniq<opendal::Reader>(op->GetReader(path))), metadata(std::move(metadata_p)) {
+      metadata(std::move(metadata_p)) {
+	opendal::ReaderOptions options;
+	options.content_length_hint = NumericCast<uint64_t>(metadata.file_size);
+	// Weak ETags cannot protect range reads with If-Match. Do not send a
+	// condition to services that cannot honor it.
+	if (!metadata.version_tag.empty() && !StringUtil::StartsWith(metadata.version_tag, "W/") &&
+	    op->Info().read_with_if_match) {
+		options.if_match = metadata.version_tag;
+	}
+	reader = make_uniq<opendal::Reader>(op->GetReader(path, options));
 }
 
 idx_t OpenDALReadHandle::Size() const {

@@ -26,6 +26,16 @@ SELECT * FROM read_parquet('s3://analytics/events.parquet');
 Paths with unknown schemes and local paths are not claimed by this extension; DuckDB can route those paths to another
 registered filesystem.
 
+Storage backends that support listing also support `*`, `?`, character classes such as `[ab]`, and recursive `**`
+path components. Wildcards apply to object paths, not bucket names or other storage configuration:
+
+```sql
+SELECT * FROM read_parquet('s3://analytics/events/**/*.parquet');
+```
+
+Globs use streaming directory listings and only descend into matching directories. HTTP URLs do not support globbing.
+Matched paths are returned in sorted order with special characters percent-encoded.
+
 ## How to use extension
 
 ```sh
@@ -34,6 +44,9 @@ LOAD duckdb_opendalfs;
 ```
 
 ## Performance
+
+Read handles reuse the initial file size when creating their OpenDAL reader. For backends supporting conditional
+reads, a strong ETag from the initial stat is sent with reads so an object changed during a scan produces an error.
 
 For high-throughput remote scans, use this extension together with the
 [`cache_httpfs` community extension](https://duckdb.org/community_extensions/extensions/cache_httpfs). The OpenDAL

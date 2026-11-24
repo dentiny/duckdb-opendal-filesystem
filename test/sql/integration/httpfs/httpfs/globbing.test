@@ -9,4 +9,4 @@ require duckdb_opendalfs
 statement error
 select parse_path(filename), size, part, date from read_parquet('https://raw.githubusercontent.com/duckdb/duckdb/main/data/parquet-testing/hive-partitioning/simple/*/*/test.parquet') order by filename;
 ----
-Invalid Input Error: Globs (`*`) for generic OpenDAL files are not supported
+Invalid Input Error: Globs for HTTP OpenDAL files are not supported

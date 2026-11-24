@@ -280,4 +280,50 @@ TEST_CASE("OpenDAL filesystem validates move paths", "[opendalfs]") {
 	REQUIRE_THROWS(fs.MoveFile("memory://source.txt", "memory://"));
 }
 
+TEST_CASE("OpenDAL globs match path components and prune unrelated directories", "[opendalfs]") {
+	TemporaryDirectory directory;
+	OpenDALFileSystem fs({{"root", directory.Path()}});
+	fs.CreateDirectory("fs://data/nested/deep/");
+	fs.CreateDirectory("fs://other/");
+	for (const auto &path :
+	     {"fs://data/a.parquet", "fs://data/b.parquet", "fs://data/a.csv", "fs://data/nested/c.parquet",
+	      "fs://data/nested/deep/d.parquet", "fs://data/space name.parquet", "fs://other/unrelated.parquet",
+	      "fs://space%20root.parquet", "fs://data/question%3F.txt", "fs://data/questionX.txt"}) {
+		auto writer = fs.OpenFile(path, FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE_NEW);
+		writer->Close();
+	}
+	auto glob = [&](const string &pattern) {
+		vector<string> paths;
+		for (const auto &match : fs.Glob(pattern)) {
+			paths.push_back(match.path);
+		}
+		return paths;
+	};
+	REQUIRE(glob("fs://data/*.parquet") ==
+	        vector<string> {"fs://data/a.parquet", "fs://data/b.parquet", "fs://data/space%20name.parquet"});
+	REQUIRE(glob("fs://data/?.parquet") == vector<string> {"fs://data/a.parquet", "fs://data/b.parquet"});
+	REQUIRE(glob("fs://data/[ab].parquet") == vector<string> {"fs://data/a.parquet", "fs://data/b.parquet"});
+	REQUIRE(glob("fs://data/*/*.parquet") == vector<string> {"fs://data/nested/c.parquet"});
+	REQUIRE(glob("fs://data/**/?.parquet") == vector<string> {"fs://data/a.parquet", "fs://data/b.parquet",
+	                                                          "fs://data/nested/c.parquet",
+	                                                          "fs://data/nested/deep/d.parquet"});
+	REQUIRE(glob("fs://data/**/**/?.parquet") == glob("fs://data/**/?.parquet"));
+	REQUIRE(glob("fs://data/*/") == vector<string> {"fs://data/nested/"});
+	REQUIRE(glob("fs://data/missing*.parquet").empty());
+	REQUIRE(glob("fs://data/a.csv") == vector<string> {"fs://data/a.csv"});
+	REQUIRE(glob("fs://other/*.parquet") == vector<string> {"fs://other/unrelated.parquet"});
+	REQUIRE(glob("fs://*.parquet") == vector<string> {"fs://space%20root.parquet"});
+	REQUIRE(glob("fs://data/question?.txt") == vector<string> {"fs://data/question%3F.txt", "fs://data/questionX.txt"});
+	REQUIRE(glob("fs://data/question%3F*.txt") == vector<string> {"fs://data/question%3F.txt"});
+	REQUIRE_THROWS(fs.Glob("s3://bucket*/data/*.parquet"));
+	REQUIRE_THROWS(fs.Glob("https://example.com/*.parquet"));
+
+	auto reader = fs.OpenFile(glob("fs://data/space*.parquet").at(0), FileFlags::FILE_FLAGS_READ);
+	REQUIRE(reader->GetFileSize() == 0);
+	auto root_reader = fs.OpenFile(glob("fs://*.parquet").at(0), FileFlags::FILE_FLAGS_READ);
+	REQUIRE(root_reader->GetFileSize() == 0);
+	auto question_reader = fs.OpenFile(glob("fs://data/question?.txt").at(0), FileFlags::FILE_FLAGS_READ);
+	REQUIRE(question_reader->GetFileSize() == 0);
+}
+
 } // namespace duckdb

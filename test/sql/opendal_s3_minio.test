@@ -30,4 +30,20 @@ SELECT * FROM read_csv_auto('s3://test/secret-test.csv');
 42	opendal
 
 statement ok
+COPY (SELECT 1 AS value) TO 's3://test/glob/first.csv' (HEADER);
+
+statement ok
+COPY (SELECT 2 AS value) TO 's3://test/glob/nested/second.csv' (HEADER);
+
+query I
+SELECT SUM(value) FROM read_csv_auto('s3://test/glob/**/*.csv');
+----
+3
+
+query I
+SELECT SUM(value) FROM read_csv_auto('s3://test/glob/*.csv');
+----
+1
+
+statement ok
 DROP SECRET minio_secret;
