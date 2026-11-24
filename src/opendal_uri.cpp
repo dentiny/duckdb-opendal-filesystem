@@ -29,7 +29,10 @@ OpenDALUri OpenDALUri::Parse(const string &uri_p, idx_t prefix_size_p) {
 	const auto authority_size = slash == string::npos ? uri_p.size() - prefix_size_p : slash - prefix_size_p;
 	result.authority = uri_p.substr(prefix_size_p, authority_size);
 	result.root = slash == string::npos ? string() : uri_p.substr(slash + 1);
-	const auto query = result.root.find('?');
+	// Only HTTP URIs have query parameters here. Other backends use '?' as
+	// a glob character (literal question marks can be percent-encoded).
+	const bool is_http = StringUtil::StartsWith(uri_p, "http://") || StringUtil::StartsWith(uri_p, "https://");
+	const auto query = is_http ? result.root.find('?') : string::npos;
 	if (query != string::npos) {
 		result.query = result.root.substr(query + 1);
 		result.root.resize(query);
@@ -131,7 +134,7 @@ void OpenDALUri::Apply(const string &scheme_p, const string &uri_prefix_p, unord
 	if (IsRootOnlyService(scheme_p)) {
 		return;
 	}
-	path_p = authority;
+	path_p = StringUtil::URLDecode(authority);
 	if (!root.empty()) {
 		path_p += "/" + root;
 	}

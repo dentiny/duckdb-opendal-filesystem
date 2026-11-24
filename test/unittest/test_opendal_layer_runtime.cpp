@@ -1,6 +1,7 @@
 #include "catch/catch.hpp"
 #include "opendal_file_system.hpp"
 #include "opendal_layer_options.hpp"
+#include "duckdb/common/string_util.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -19,7 +20,7 @@ namespace {
 
 class MockHttpService {
 public:
-	enum class Mode { DELAY, RETRY_THEN_SUCCEED, SUCCEED };
+	enum class Mode { DELAY, RETRY_THEN_SUCCEED, SUCCEED, CHANGED_ETAG };
 
 	MockHttpService(Mode mode_p, idx_t expected_requests_p, std::chrono::milliseconds delay_p = {})
 	    : mode(mode_p), expected_requests(expected_requests_p), delay(delay_p) {
@@ -65,6 +66,9 @@ public:
 	idx_t RequestCount() const {
 		return request_count.load();
 	}
+	bool SawIfMatch() const {
+		return saw_if_match.load();
+	}
 
 private:
 	void Serve() {
@@ -74,8 +78,16 @@ private:
 				return;
 			}
 			char request[4096];
-			recv(client_fd, request, sizeof(request), 0);
+			const auto request_size = recv(client_fd, request, sizeof(request), 0);
+			if (request_size <= 0) {
+				close(client_fd);
+				continue;
+			}
 			const auto current = ++request_count;
+			const auto headers = StringUtil::Lower(string(request, static_cast<idx_t>(request_size)));
+			if (headers.find("if-match: \"original\"") != string::npos) {
+				saw_if_match = true;
+			}
 			if (mode == Mode::DELAY) {
 				std::this_thread::sleep_for(delay);
 			} else {
@@ -83,6 +95,12 @@ private:
 				    mode == Mode::RETRY_THEN_SUCCEED && current < expected_requests
 				        ? "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
 				        : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+				if (mode == Mode::CHANGED_ETAG) {
+					response =
+					    StringUtil::StartsWith(headers, "head ")
+					        ? "HTTP/1.1 200 OK\r\nContent-Length: 1\r\nETag: \"original\"\r\nConnection: close\r\n\r\n"
+					        : "HTTP/1.1 412 Precondition Failed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+				}
 				send(client_fd, response, std::strlen(response), 0);
 			}
 			shutdown(client_fd, SHUT_RDWR);
@@ -95,6 +113,7 @@ private:
 	idx_t expected_requests;
 	std::chrono::milliseconds delay;
 	std::atomic<idx_t> request_count {0};
+	std::atomic<bool> saw_if_match {false};
 	int server_fd = -1;
 	uint16_t port = 0;
 	std::thread worker;
@@ -134,10 +153,22 @@ TEST_CASE("OpenDAL read handles cache metadata after the first size lookup", "[o
 	OpenDALFileSystem fs;
 	auto handle = fs.OpenFile(service.Endpoint() + "/cached.csv", FileFlags::FILE_FLAGS_READ);
 
+	REQUIRE(service.RequestCount() == 1);
 	REQUIRE(handle->GetFileSize() == 0);
 	const auto requests_after_first_size = service.RequestCount();
 	REQUIRE(handle->GetFileSize() == 0);
 	REQUIRE(service.RequestCount() == requests_after_first_size);
+}
+
+TEST_CASE("OpenDAL readers reject an object changed after stat", "[opendalfs][layers]") {
+	MockHttpService service(MockHttpService::Mode::CHANGED_ETAG, 2);
+	OpenDALFileSystem fs;
+	auto handle = fs.OpenFile(service.Endpoint() + "/changed.csv", FileFlags::FILE_FLAGS_READ);
+	REQUIRE(service.RequestCount() == 1);
+	char byte;
+	REQUIRE_THROWS(handle->Read(&byte, 1));
+	REQUIRE(service.SawIfMatch());
+	REQUIRE(service.RequestCount() == 2);
 }
 
 TEST_CASE("OpenDAL layer options are only pushed when enabled", "[opendalfs][layers]") {
