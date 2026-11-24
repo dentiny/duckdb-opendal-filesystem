@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Upgrade OpenDAL to upstream main commit `0930bbae02d3e54e487d3e5a492e202acc16e246`.
+- Remove the macOS CXX bridge symlink workaround now that OpenDAL generates bridge files in the CMake build directory.
+
 ## 0.3.1 - 2026-11-23
 
 ### Changed
